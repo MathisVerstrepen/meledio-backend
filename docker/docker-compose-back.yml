@@ -1,0 +1,69 @@
+# docker compose -f docker-compose-back.yml up -d
+
+version: "3.1"
+
+services:
+
+  iris_db:
+    container_name: iris
+    image: supabase/postgres:14.1.0.21
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    restart: unless-stopped
+    ports:
+      - ${POSTGRES_PORT}:5432
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # - ./volumes/db/data:/var/lib/postgresql/data
+      - ./conf/db:/docker-entrypoint-initdb.d
+
+  atlas_redis:
+    container_name: atlas
+    image: redis/redis-stack:latest
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD}"
+    ports:
+      - ${ATLAS_PORT}:6379
+
+  ares_api:
+    container_name: ares
+    image: dune_ares:latest
+    # build:
+    #   context: ../
+    #   dockerfile: docker/ares.dockerfile
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ../ares/app
+        target: /ares/app
+      - type: bind
+        source: ../bacchus
+        target: /bacchus
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - ${ARES_PORT}:5100
+    depends_on:
+      - iris_db
+      - atlas_redis
+
+  triton_api:
+    container_name: triton
+    image: dune_triton:latest
+    # build:
+    #   context: ../
+    #   dockerfile: docker/triton.dockerfile
+    restart: always
+    volumes:
+      - type: bind
+        source: ../triton/app
+        target: /triton/app
+      - type: bind
+        source: ../bacchus
+        target: /bacchus
+    ports:
+      - ${TRITON_PORT}:5110
+    depends_on:
+      - iris_db
+      - atlas_redis
