@@ -12,7 +12,6 @@ from app.functions.s1 import s1
 from dotenv import load_dotenv
 load_dotenv()
 
-
 ares = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -158,7 +157,7 @@ async def get_download_s1(vidID: str, gameID: int, token: str = Depends(oauth2_s
         r_games.json().set(gameID, '$.album', [])
 
         s1_cli = s1()
-        vid_dur: list = s1_cli.downloader(vidID)
+        vid_dur: list = s1_cli.downloader(vidID, gameID)
     else:
         raiseNoChapterFound(gameID)
 

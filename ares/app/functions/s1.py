@@ -286,12 +286,14 @@ class s1():
 
         return chapter_data
 
-    def downloader(self, vidID: str) -> list:
+    def downloader(self, vidID: str, gameID: int) -> list:
+        
+        os.mkdir(f'/bacchus/audio/{gameID}')
         
         URL = f'http://www.youtube.com/watch?v={vidID}'
 
         ydl_opts = {
-            'outtmpl': f'/bacchus/audio/temp_{vidID}.m4a',
+            'outtmpl': f'/bacchus/audio/{gameID}/temp.m4a',
             'format': 'm4a/bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -320,10 +322,10 @@ class s1():
                 end = chapters[i+1]['timestamp']
 
             file_uuid = uuid.uuid4()
-            file_name = f'{gameID}_{str(file_uuid)}'
+            file_name = f'{str(file_uuid)}'
 
-            p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/temp_{vidID}.m4a', '-ss',
-                            str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy', '-y', f'/bacchus/audio/{file_name}.m4a'], shell=False,
+            p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
+                            str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy', '-y', f'/bacchus/audio/{gameID}/{file_name}.m4a'], shell=False,
                             stdin=None, stdout=None, stderr=None, close_fds=True)
             subprocess_list.append(p)
 
@@ -338,7 +340,7 @@ class s1():
 
         [p.wait() for p in subprocess_list]
 
-        os.remove(f"/bacchus/audio/temp_{vidID}.m4a")
+        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         self.conn.commit()
 
         return tracklist
