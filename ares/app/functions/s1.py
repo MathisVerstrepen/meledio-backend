@@ -342,6 +342,3 @@ class s1():
         self.conn.commit()
 
         return tracklist
-
-
-print('test')
