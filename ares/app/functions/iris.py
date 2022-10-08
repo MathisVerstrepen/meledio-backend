@@ -221,7 +221,6 @@ class iris:
                 curs.execute("UPDATE iris.games SET {0} WHERE id={1}".format(
                     query_lvl1[0:-1], gameID))
 
-        print('commit')
         self.conn.commit()
 
     def del_game(self, gameID: int) -> bool:

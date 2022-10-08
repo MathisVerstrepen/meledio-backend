@@ -5,6 +5,7 @@ import os
 import redis
 import json
 import time
+import logging
 
 from app.functions.IGDB import IGDB
 from app.functions.iris import iris, iris_user
@@ -31,9 +32,12 @@ ares.add_middleware(
     allow_headers=["*"],
 )
 
+logging.basicConfig(filename='app/logs/ares.log', encoding='utf-8', level=logging.DEBUG, format='%(asctime)s -- %(levelname)s -- %(message)s')
+
 
 def auth(token: str) -> None:
     if (token != os.getenv('ARES_TOKEN')):
+        logging.debug('%s fail logging', token)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -42,6 +46,7 @@ def auth(token: str) -> None:
 
 
 def raiseNoGameFound(gameID: int) -> None:
+    logging.error('No matching game found in database for ID [%s].', gameID)
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"No matching game found in database for ID {gameID}"
@@ -49,6 +54,7 @@ def raiseNoGameFound(gameID: int) -> None:
 
 
 def raiseNoChapterFound(gameID: int) -> None:
+    logging.error('No chapter found in database for ID [%s].', gameID)
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"No chapter found in database for gameID {gameID}"
@@ -73,6 +79,8 @@ async def add_process_time_header(request, call_next):
 def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
+    
+    logging.debug('Searching matching games for input [%s].', game)
 
     IGDB_client = IGDB(r_glob)
     res = IGDB_client.matching_games(game)
@@ -84,12 +92,18 @@ def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> d
 def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
+    
+    logging.debug('Obtaining the metadata of the game ID [%s].', gameID)
 
     IGDB_cli = IGDB(r_glob)
     game_data = IGDB_cli.new_game(gameID)
+    
+    logging.debug('Pushing metadata of the game ID [%s] to database.', gameID)
 
     iris_cli = iris(r_glob, r_games)
     iris_cli.push_new_game(game_data['data'])
+    
+    logging.debug('Game ID [%s] - Push successfull to database.', gameID)
 
     return {"data": game_data['data']}
 
@@ -101,23 +115,28 @@ def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
     iris_cli = iris(r_glob, r_games)
     iris_cli.del_game(gameID)
+    
+    logging.debug('Deleted Game ID [%s].', gameID)
 
 
 @ares.get("/s1/match")
 def get_best_matching_games_s1(gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
  
     auth(token)
+    
+    logging.debug('Searching best matching data from Source 1 for game ID [%s].', gameID)
 
     res_name = r_games.json().get(gameID, '$.name')
     if res_name:
         res_s1_match = r_games.json().get(gameID, '$.s1.match')
-        # res_s1_match = False
         if not res_s1_match:
             s1_client = s1()
             res = s1_client.best_match(res_name[0])
+            logging.debug('Pushing Source 1 data for game ID [%s] to cache.', gameID)
             r_games.json().set(gameID, "$.s1", {})
             r_games.json().set(gameID, '$.s1.match', res)
         else:
+            logging.debug('Source 1 data for game ID [%s] already in database.', gameID)
             res = res_s1_match[0]
     else:
         raiseNoGameFound(gameID)
@@ -129,6 +148,8 @@ def get_best_matching_games_s1(gameID: int, token: str = Depends(oauth2_scheme))
 def get_chapter_s1(id: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
+    
+    logging.debug('Searching chapters for data from Source 1 for game ID [%s].', gameID)
 
     res_name = r_games.json().get(gameID, '$.name')
     if res_name:
@@ -136,9 +157,11 @@ def get_chapter_s1(id: str, gameID: int, token: str = Depends(oauth2_scheme)) ->
         if not res_s1_chapter:
             s1_client = s1()
             res = s1_client.get_chapter(id)
+            logging.debug('Pushing Source 1 chapters for game ID [%s] to cache.', gameID)
             r_games.json().set(gameID, '$.s1.videoID', id)
             r_games.json().set(gameID, '$.s1.chapter', res)
         else:
+            logging.debug('Source 1 chapters for game ID [%s] already in database.', gameID)
             res = res_s1_chapter[0]
     else:
         raiseNoGameFound(gameID)
@@ -150,6 +173,8 @@ def get_chapter_s1(id: str, gameID: int, token: str = Depends(oauth2_scheme)) ->
 async def get_download_s1(vidID: str, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
+    
+    logging.debug('Downloading audio data from Source 1 for game ID [%s].', gameID)
 
     res_s1_chapter = r_games.json().get(gameID, '$.s1.chapter')
     if res_s1_chapter:
@@ -167,6 +192,8 @@ async def get_download_s1(vidID: str, gameID: int, token: str = Depends(oauth2_s
 async def get_file_format_s1(vidID: str, gameID: int, vid_dur: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
+    
+    logging.debug('Formating audio data from Source 1 for game ID [%s].', gameID)
 
     res_s1_chapter = r_games.json().get(gameID, '$.s1.chapter')
 
