@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import redis
 import json
@@ -13,7 +16,10 @@ from app.functions.s1 import s1
 from dotenv import load_dotenv
 load_dotenv()
 
+limiter = Limiter(key_func=get_remote_address)
 ares = FastAPI()
+ares.state.limiter = limiter
+ares.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 r_glob = redis.Redis(host='atlas', port=6379, db=0,
@@ -203,7 +209,8 @@ async def get_file_format_s1(vidID: str, gameID: int, vid_dur: int, token: str =
     return {"data": tracklist}
 
 @ares.get("/r1/new")
-def add_new_user_redis(userData: object) -> None:
+# @limiter.limit("5/minute")
+async def add_new_user_redis(userData: object) -> None:
 
     print(userData)
 
@@ -223,7 +230,6 @@ def add_new_user_redis(userData: object) -> None:
 def get_user_redis(data: object) -> None:
 
     data = json.loads(data)
-    print(data)
     elements = data['el']
 
     iris_user_cli = iris_user()
@@ -236,5 +242,4 @@ def get_user_redis(data: object) -> None:
     else:
         raiseNoUserFound(data['id']) 
 
-    print(res)
     return {'data': res}

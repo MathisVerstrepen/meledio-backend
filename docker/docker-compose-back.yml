@@ -3,7 +3,6 @@
 version: "3.1"
 
 services:
-
   iris_db:
     container_name: iris
     image: supabase/postgres:14.1.0.21
@@ -14,7 +13,7 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      # - ./volumes/db/data:/var/lib/postgresql/data
+      - ./volumes/db/data:/var/lib/postgresql/data
       - ./conf/db:/docker-entrypoint-initdb.d
 
   atlas_redis:
@@ -22,7 +21,9 @@ services:
     image: redis/redis-stack:latest
     restart: unless-stopped
     environment:
-      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD}"
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD} --save 60 1"
+    volumes:
+      - ./volumes/redis/data:/data
     ports:
       - ${ATLAS_PORT}:6379
 

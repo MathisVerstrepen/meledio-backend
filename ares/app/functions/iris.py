@@ -268,7 +268,7 @@ class iris_user:
         with self.conn.cursor() as curs:
 
             curs.execute(
-                f"select count(*) from public.users where id = '{userID}'")
+                f"select count(*) from public.profiles where id = '{userID}'")
             res = curs.fetchall()
             
             return res[0][0]
