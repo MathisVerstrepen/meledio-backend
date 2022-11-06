@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -100,12 +100,13 @@ def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> d
 
 
 @ares.post("/new_game")
-def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+@limiter.limit("60/minute")
+def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
 
     logging.debug("Obtaining the metadata of the game ID [%s].", gameID)
-
+ 
     IGDB_cli = IGDB(r_glob)
     game_data = IGDB_cli.new_game(gameID)
 
@@ -120,7 +121,8 @@ def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
 
 @ares.delete("/del/game")
-def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> None:
+@limiter.limit("60/minute")
+def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
 
@@ -131,27 +133,23 @@ def push_new_game(gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
 
 @ares.get("/s1/match")
-def get_best_matching_games_s1(
-    gameID: int, token: str = Depends(oauth2_scheme)
-) -> dict:
+@limiter.limit("60/minute")
+def get_best_matching_games_s1(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
 
-    logging.debug(
-        "Searching best matching data from Source 1 for game ID [%s].", gameID
-    )
+    logging.debug("Searching best matching data from Source 1 for game ID [%s].", gameID)
 
-    res_name = r_games.json().get(gameID, "$.name")
+    res_name = r_games.json().get(f"games:{gameID}", "$.name")
     if res_name:
-        res_s1_match = r_games.json().get(gameID, "$.s1.match")
+        res_s1_match = r_games.json().get(f"games:{gameID}", "$.s1.match") 
         if not res_s1_match:
             s1_client = s1()
             res = s1_client.best_match(res_name[0])
             logging.debug("Pushing Source 1 data for game ID [%s] to cache.", gameID)
-            # r_games.json().set(gameID, "$.s1", {})
-            # r_games.json().set(gameID, '$.s1.match', res)
-            r_games.json().set("games", "$.[%s].s1".format(gameID), {})
-            r_games.json().set("games", "$.[%s].s1.match".format(gameID), res)
+
+            r_games.json().set(f"games:{gameID}", f"$.s1", {})
+            r_games.json().set(f"games:{gameID}", f"$.s1.match", res)
         else:
             logging.debug("Source 1 data for game ID [%s] already in database.", gameID)
             res = res_s1_match[0]
@@ -162,23 +160,24 @@ def get_best_matching_games_s1(
 
 
 @ares.get("/s1/chapter")
-def get_chapter_s1(id: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+@limiter.limit("60/minute")
+def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
 
     auth(token)
 
     logging.debug("Searching chapters for data from Source 1 for game ID [%s].", gameID)
 
-    res_name = r_games.json().get(gameID, "$.name")
+    res_name = r_games.json().get(f"games:{gameID}", "$.name")
     if res_name:
-        res_s1_chapter = r_games.json().get(gameID, "$.s1.chapter")
+        res_s1_chapter = r_games.json().get(f"games:{gameID}", "$.s1.chapter")
         if not res_s1_chapter:
             s1_client = s1()
             res = s1_client.get_chapter(id)
             logging.debug(
                 "Pushing Source 1 chapters for game ID [%s] to cache.", gameID
             )
-            r_games.json().set(gameID, "$.s1.videoID", id)
-            r_games.json().set(gameID, "$.s1.chapter", res)
+            r_games.json().set(f"games:{gameID}", "$.s1.videoID", id)
+            r_games.json().set(f"games:{gameID}", "$.s1.chapter", res)
         else:
             logging.debug(
                 "Source 1 chapters for game ID [%s] already in database.", gameID
@@ -191,18 +190,17 @@ def get_chapter_s1(id: str, gameID: int, token: str = Depends(oauth2_scheme)) ->
 
 
 @ares.get("/s1/download")
-async def get_download_s1(
-    vidID: str, gameID: int, token: str = Depends(oauth2_scheme)
-) -> None:
+@limiter.limit("60/minute")
+async def get_download_s1(request: Request, vidID: str, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
 
     logging.debug("Downloading audio data from Source 1 for game ID [%s].", gameID)
 
-    res_s1_chapter = r_games.json().get(gameID, "$.s1.chapter")
+    res_s1_chapter = r_games.json().get(f"games:{gameID}", "$.s1.chapter")
     if res_s1_chapter:
 
-        r_games.json().set(gameID, "$.album", [])
+        r_games.json().set(f"games:{gameID}", "$.album", [])
 
         s1_cli = s1()
         vid_dur: list = s1_cli.downloader(vidID, gameID)
@@ -213,15 +211,14 @@ async def get_download_s1(
 
 
 @ares.get("/s1/format_file")
-async def get_file_format_s1(
-    vidID: str, gameID: int, vid_dur: int, token: str = Depends(oauth2_scheme)
-) -> None:
+@limiter.limit("60/minute")
+async def get_file_format_s1(request: Request, vidID: str, gameID: int, vid_dur: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
 
     logging.debug("Formating audio data from Source 1 for game ID [%s].", gameID)
 
-    res_s1_chapter = r_games.json().get(gameID, "$.s1.chapter")
+    res_s1_chapter = r_games.json().get(f"games:{gameID}", "$.s1.chapter")
 
     s1_cli = s1()
     tracklist: list = s1_cli.file_formater(

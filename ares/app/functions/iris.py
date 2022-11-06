@@ -68,13 +68,6 @@ MEDIA_TABLES = ["cover", "screenshots", "artworks"]
 
 CLEAR_GAME = "category = null, collection = null, complete = false, first_release_date = null, parent_game = null, rating = null, slug = null, summary = null"
 
-
-def game_exist(curs, table, id):
-    curs.execute("SELECT complete FROM iris.{0} where id={1};".format(table, id))
-    fetch_res = curs.fetchone()
-    return fetch_res
-
-
 def glob_exist(curs, table, id):
     curs.execute("SELECT count(*) FROM iris.{0} where id={1};".format(table, id))
     fetch_res = curs.fetchone()
@@ -180,22 +173,39 @@ class iris:
             self.IGDB_client = IGDB(r)
         except:
             self.conn = None
+            
+    def existInCache(self, gameID: str):
+        
+        return self.rcli.json().get(f"games:{gameID}", "$.complete")
+
+    def existInDB(self, curs, table, id):
+        curs.execute("SELECT complete FROM iris.{0} where id={1};".format(table, id))
+        fetch_res = curs.fetchone()
+        return fetch_res
+
 
     def push_new_game(self, game_data):
         gameID = game_data[0]["id"]
 
         with self.conn.cursor() as curs:
 
-            gameInDB = game_exist(curs, "games", gameID)
-
-            if not gameInDB:
-                # insert game base data to db and cache if non existent
-                curs.execute(f"INSERT INTO iris.games (id) VALUES ({gameID})")
-                # self.rcli.json().arrappend("games", "$", {gameID: {"complete": False}})
+            inCache = self.existInCache(gameID)
+            inDB = self.existInDB(curs, "games", gameID)
+            
+            logging.debug(inCache)
+            logging.debug(inDB)
+            
+            if inCache == None:
+                #-- Construct base cache data --#
                 self.rcli.json().set(f"games:{gameID}", "$", {'complete': False})
 
-            if not gameInDB or not gameInDB[0]:
-                # insert game complete data to db and cache if non complete
+            if not inDB:
+                #-- Contruct base db data --#
+                curs.execute(f"INSERT INTO iris.games (id) VALUES ({gameID})")
+
+            if not inDB or not inDB[0] or inCache == None or not all(inCache):
+                #-- Upload all metadata to DB and cache --#
+
                 query_lvl1 = "complete = true,"
 
                 for field in game_data[0]:
@@ -217,7 +227,7 @@ class iris:
                         for data in field_data:
                             field_query.append((gameID, data["id"]))
 
-                            exist = game_exist(curs, "games", data["id"])
+                            exist = self.existInDB(curs, "games", data["id"])
                             if not exist:
                                 name = data["name"].replace("'", "''")
                                 games_query += f"('{data['id']}', False, '{name}'),"
@@ -227,11 +237,6 @@ class iris:
                                     "$",
                                     {"complete": False, "name": data["name"]},
                                 )
-                                # self.rcli.json().set(
-                                #     "games",
-                                #     f"$.{gameID}.name",
-                                #     data["name"],
-                                # )
 
                         if games_query:
                             curs.execute(
@@ -267,44 +272,31 @@ class iris:
                         else:
                             insert_to_db(curs, field, field_data, gameID)
 
-                        # if field in self.download_level:
-                        #     thread = threading.Thread(target=image_downloader, args=(
-                        #         self.IGDB_client, field, field_data))
-                        #     thread.start()
+                        if field in self.download_level:
+                            thread = threading.Thread(target=image_downloader, args=(
+                                self.IGDB_client, field, field_data))
+                            thread.start()
 
                     if field in self.cache_level:
                         if field == "cover":
                             self.rcli.json().set(
                                 f"games:{gameID}", "$.cover", field_data["image_id"]
                             )
-                            # self.rcli.json().set(
-                            #     "games",
-                            #     f"$.{gameID}.cover",
-                            #     field_data["image_id"],
-                            # )
+
                         elif field == "screenshots":
                             self.rcli.json().set(
                                 f"games:{gameID}",
                                 "$.screenshots",
                                 [screenshot["image_id"] for screenshot in field_data],
                             )
-                            # self.rcli.json().set(
-                            #     "games",
-                            #     f"$.{gameID}.screenshots",
-                            #     [screenshot["image_id"] for screenshot in field_data],
-                            # )
+
                         else:
                             self.rcli.json().set(f"games:{gameID}", f"$.{field}", field_data)
-                            # self.rcli.json().set(
-                            #     "games",
-                            #     f"$.{gameID}.{field}",
-                            #     field_data,
-                            # )
 
                 parent = game_data[0].get("parent_game")
                 if parent:
                     parent_id = parent["id"]
-                    if not game_exist(curs, "games", parent_id):
+                    if not self.existInDB(curs, "games", parent_id):
                         curs.execute(
                             "INSERT INTO iris.games (id, complete, name) VALUES ({0}, false, '{1}')".format(
                                 parent_id, parent["name"]
@@ -313,11 +305,6 @@ class iris:
                     query_lvl1 += f"parent_game = {parent_id},"
 
                 self.rcli.json().set(f"games:{gameID}", "$.complete", True)
-                # self.rcli.json().set(
-                #     "games",
-                #     f"$.{gameID}.complete",
-                #     True,
-                # )
 
                 curs.execute(
                     "UPDATE iris.games SET {0} WHERE id={1}".format(
@@ -325,7 +312,7 @@ class iris:
                     )
                 )
 
-        # self.conn.commit()
+        self.conn.commit()
 
     def del_game(self, gameID: int) -> bool:
 
@@ -343,17 +330,22 @@ class iris:
             requests.delete(
                 "http://triton:5110/del_media", data=json.dumps({"medias": medias_hash})
             )
+            
+            inCache = self.existInCache(gameID)
+            inDB = self.existInDB(curs, "games", gameID)
+            
+            if inCache:
+                gameName = self.rcli.json().get(f"games:{gameID}", "$.name")[0]
+                self.rcli.json().set(f"games:{gameID}", "$", {
+                    'complete': False,
+                    'name': gameName
+                })
+                
+            if inDB:
+                for table in GAMEID_TABLES:
+                    curs.execute(f"DELETE FROM iris.{table} WHERE game_id = {gameID}")
 
-            # gameName = self.rcli.json().get(gameID, "$.name")[0]
-            # self.rcli.json().set(gameID, "$", {
-            #     'complete': False,
-            #     'name': gameName
-            # })
-
-            for table in GAMEID_TABLES:
-                curs.execute(f"DELETE FROM iris.{table} WHERE game_id = {gameID}")
-
-            curs.execute(f"UPDATE iris.games SET {CLEAR_GAME} WHERE id = {gameID}")
+                curs.execute(f"UPDATE iris.games SET {CLEAR_GAME} WHERE id = {gameID}")
 
         self.conn.commit()
 

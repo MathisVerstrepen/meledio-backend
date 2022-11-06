@@ -288,7 +288,13 @@ class s1():
 
     def downloader(self, vidID: str, gameID: int) -> list:
         
-        os.mkdir(f'/bacchus/audio/{gameID}')
+        dir = f'/bacchus/audio/{gameID}'
+        try:
+            os.mkdir(dir)
+        except:
+            for f in os.listdir(dir):
+                os.remove(os.path.join(dir, f))
+            
         
         URL = f'http://www.youtube.com/watch?v={vidID}'
 
@@ -333,7 +339,7 @@ class s1():
                 'title': chapter['title'],
                 'file': file_name
             }
-            r_games.json().arrappend(gameID, '$.album', track)
+            r_games.json().arrappend(f"games:{gameID}", '$.album', track)
             tracklist.append(track)
 
         push_song_db(gameID, chapter['title'], file_name, self.conn)
