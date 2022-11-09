@@ -1,3 +1,4 @@
 *.jpg
 *.m4a
 *.log
+__pycache__
