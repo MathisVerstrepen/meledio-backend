@@ -1,0 +1,180 @@
+{
+  "alternative_names": {
+    "columns": ["id", "game_id", "comment", "name"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "artworks": {
+    "columns": ["id", "game_id", "alpha_channel", "animated", "height", "width", "image_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "category": {
+    "columns": ["id", "name"]
+  },
+  "collection": {
+    "columns": ["id", "name", "slug"]
+  },
+  "companies": {
+    "columns": ["id", "description", "logo", "name", "slug"]
+  },
+  "cover": {
+    "columns": ["id", "game_id", "alpha_channel", "animated", "height", "width", "image_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "dlcs": {
+    "columns": ["id", "game_id", "dlcs_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "dlcs_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "expanded_games": {
+    "columns": ["id", "game_id", "expanded_games_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "expanded_games_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "expansions": {
+    "columns": ["id", "game_id", "expansions_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "expansions_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "games": {
+    "columns": [
+      "id",
+      "category",
+      "collection",
+      "complete",
+      "first_release_date",
+      "name",
+      "parent_game",
+      "rating",
+      "slug",
+      "summary"
+    ],
+    "foreign": {
+      "category": {
+        "table": "category",
+        "column": "id"
+      },
+      "collection": {
+        "table": "collection",
+        "column": "id"
+      },
+      "parent_game": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "genres": {
+    "columns": ["id", "game_id", "name", "slug"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "involved_companies": {
+    "columns": ["id", "game_id", "company", "developer", "porting", "publisher", "supporting"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "company": {
+        "table": "companies",
+        "column": "id"
+      }
+    }
+  },
+  "keywords": {
+    "columns": ["id", "game_id", "name", "slug"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "screenshots": {
+    "columns": ["id", "game_id", "alpha_channel", "animated", "height", "width", "image_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "similar_games": {
+    "columns": ["id", "game_id", "similar_games_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "similar_games_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "standalone_expansions": {
+    "columns": ["id", "game_id", "standalone_expansions_id"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      },
+      "standalone_expansions_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  },
+  "themes": {
+    "columns": ["id", "game_id", "name", "slug"],
+    "foreign": {
+      "game_id": {
+        "table": "games",
+        "column": "id"
+      }
+    }
+  }
+}

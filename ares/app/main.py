@@ -27,6 +27,9 @@ r_glob = redis.Redis(host="atlas", port=6379, db=1, password=os.getenv("REDIS_SE
 r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
 r_users = redis.Redis(host="atlas", port=6379, db=2, password=os.getenv("REDIS_SECRET"))
 
+f = open('./app/schema.json')
+db_schema: dict = json.load(f)
+
 origins = ["*"]
 ares.add_middleware(
     CORSMiddleware,
@@ -266,11 +269,72 @@ def get_user_redis(data: object) -> None:
     return {"data": res}
 
 
-@ares.get("/r2/games")
-def get_user_redis(size: int, options: object) -> None:
+@ares.get("/v1/games/id")
+# @limiter.limit("60/minute")
+def get_user_redis(request: Request, gID: int, label: list | None = None) -> dict:
 
-    options = json.loads(options)
+    label_list = [
+        "name", 
+        "complete",
+        "alternative_names",
+        "artworks",
+        "category",
+        "cover",
+        "collection",
+        "dlcs",
+        "expanded_games",
+        "expansions",
+        "first_release_date",
+        "genres",
+        "involved_companies",
+        "keywords",
+        "parent_game",
+        "rating",
+        "screenshots",
+        "similar_games",
+        "slug",
+        "standalone_expansions",
+        "summary",
+        "themes"
+    ]
+    game_table_labels = ["name", "complete", "first_release_date", "parent_game", "rating", "slug", 'summary']
+    games_foreign = ["category", "collection", "companies", "genres"]
+    game_data_res = {}
+    done_label = []
 
-    r_res = r_games.json().get("games", "$..name?(@..complete==true)")
+    if not label:
+        atlas_res: dict = r_games.json().get(f"games:{gID}")
+        for atlas_label, atlas_value in atlas_res.items():
+            done_label.append(atlas_label)
+            game_data_res[atlas_label] = atlas_value
+            
+        todo_label = [label for label in label_list if label not in done_label]
+        select_list = []
+        join_list = []
+        for iris_label in todo_label:
+            if iris_label not in game_table_labels:
+                table_schema = db_schema.get(iris_label)
+                if table_schema:
+                    columns = table_schema.get("columns")
+                    for column in columns:
+                        select_list.append(
+                            f"iris.{iris_label}.{column}"
+                        )
+                    foreign_keys = table_schema.get("foreign")
+                    if foreign_keys:
+                        # for foreign_column, foreign_table_value in foreign_keys.items():
+                        #     foreign_table = foreign_table_value.get("table")
+                        #     foreign_key = foreign_table_value.get("column")
+                        foreign_column = "game_id"
+                        foreign_table = "games"
+                        foreign_key = "id"
+                        join_list.append(
+                            f"JOIN iris.{iris_label} ON iris.{foreign_table}.{foreign_key} = iris.{iris_label}.{foreign_column}"
+                        ) 
+                    if iris_label in games_foreign:
+                        join_list.append(
+                            f"JOIN iris.{iris_label} ON iris.{iris_label}.id = iris.games.{iris_label}"
+                        ) 
+        sql = f"SELECT {', '.join(select_list)} FROM iris.games {' '.join(join_list)}"
 
-    return {"data": r_res}
+    return {"data": sql}
