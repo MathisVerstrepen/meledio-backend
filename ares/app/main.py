@@ -329,11 +329,11 @@ def get_user_redis(request: Request, gID: int, label: list | None = None) -> dic
                         foreign_table = "games"
                         foreign_key = "id"
                         join_list.append(
-                            f"JOIN iris.{iris_label} ON iris.{foreign_table}.{foreign_key} = iris.{iris_label}.{foreign_column}"
+                            f"LEFT JOIN iris.{iris_label} ON iris.{foreign_table}.{foreign_key} = iris.{iris_label}.{foreign_column}"
                         ) 
                     if iris_label in games_foreign:
                         join_list.append(
-                            f"JOIN iris.{iris_label} ON iris.{iris_label}.id = iris.games.{iris_label}"
+                            f"LEFT JOIN iris.{iris_label} ON iris.{iris_label}.id = iris.games.{iris_label}"
                         ) 
         sql = f"SELECT {', '.join(select_list)} FROM iris.games {' '.join(join_list)}"
 
