@@ -1,0 +1,90 @@
+{
+    "id": {
+        "type" : "",
+        "field" : ""
+    },
+    "category": {
+        "type" : "base",
+        "field" : "category"
+    },
+    "first_release_date": {
+        "type" : "date",
+        "field" : "first_release_date"
+    },
+    "name": {
+        "type" : "base",
+        "field" : "name"
+    },
+    "rating": {
+        "type" : "base",
+        "field" : "rating"
+    },
+    "slug": {
+        "type" : "base",
+        "field" : "slug"
+    },
+    "summary": {
+        "type" : "base",
+        "field" : "summary"
+    },
+    "dlcs": {
+        "type" : "",
+        "field" : ""
+    },
+    "expansions": {
+        "type" : "",
+        "field" : ""
+    },
+    "expanded_games": {
+        "type" : "",
+        "field" : ""
+    },
+    "similar_games": {
+        "type" : "",
+        "field" : ""
+    },
+    "standalone_expansions": {
+        "type" : "",
+        "field" : ""
+    },
+    "alternative_names": {
+        "type" : "",
+        "field" : ""
+    },
+    "artworks": {
+        "type" : "",
+        "field" : ""
+    },
+    "collection": {
+        "type" : "",
+        "field" : ""
+    },
+    "cover": {
+        "type" : "",
+        "field" : ""
+    },
+    "franchise": {
+        "type" : "",
+        "field" : ""
+    },
+    "genres": {
+        "type" : "",
+        "field" : ""
+    },
+    "involved_companies": {
+        "type" : "",
+        "field" : ""
+    },
+    "keywords": {
+        "type" : "",
+        "field" : ""
+    },
+    "themes": {
+        "type" : "",
+        "field" : ""
+    },
+    "screenshots": {
+        "type" : "",
+        "field" : ""
+    }
+}
