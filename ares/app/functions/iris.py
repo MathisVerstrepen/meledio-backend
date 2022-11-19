@@ -27,7 +27,6 @@ class LoggingCursor(psycopg2.extensions.cursor):
             logger.error("%s: %s" % (exc.__class__.__name__, exc))
             raise
 
-
 DOWNLOAD_QUALITY = {
     "artworks": [
         ["screenshot_med", "a_m"],
@@ -42,141 +41,31 @@ DOWNLOAD_QUALITY = {
     ],
 }
 
-ALL_TABLES = [
-    "albums",
-    "alternative_names",
-    "artworks",
-    "category",
-    "collection",
-    "companies",
-    "cover",
-    "dlcs",
-    "expanded_games",
-    "expansions",
-    "games",
-    "genres",
-    "involved_companies",
-    "keywords",
-    "screenshots",
-    "similar_games",
-    "standalone_expansions",
-    "themes",
-]
-
 GAMEID_TABLES = [
-    "albums",
-    "alternative_names",
-    "artworks",
-    "cover",
-    "dlcs",
-    "expanded_games",
-    "expansions",
-    "genres",
+    "album",
+    "alternative_name",
+    "media",
+    "extra_content",
+    "genre",
     "involved_companies",
-    "keywords",
-    "screenshots",
-    "similar_games",
-    "standalone_expansions",
-    "themes",
+    "keyword",
+    "theme",
 ]
 
-MEDIA_TABLES = ["cover", "screenshots", "artworks"]
-
-CLEAR_GAME = "category = null, collection = null, complete = false, first_release_date = null, parent_game = null, rating = null, slug = null, summary = null"
-
-def glob_exist(curs, table, id):
-    curs.execute("SELECT count(*) FROM iris.{0} where id={1};".format(table, id))
-    fetch_res = curs.fetchone()
-    return fetch_res
-
-
-def valid_str(string):
-    if type(string) == str:
-        return string.replace("'", "''")
-    else:
-        return string
-
-
-def insert_to_db(curs, field, field_data, game_id=None, check_company=False):
-
-    keys = ()
-    values = ""
-
-    for key in field_data:
-        keys += (key,)
-        values += f"'{valid_str(field_data[key])}',"
-
-    if (game_id and not check_company) or (
-        check_company and field == "involved_companies"
-    ):
-        keys += ("game_id",)
-        values += f"{game_id},"
-
-    exist = glob_exist(curs, field, field_data["id"])
-    if not exist[0]:
-        # print(str(values))
-
-        curs.execute(
-            "INSERT INTO iris.{0} {1} VALUES ({2});".format(
-                field, str(keys).replace("'", ""), values[:-1]
-            )
-        )
-
-
-def image_downloader(IGDB_client, field, field_data):
-    if field == "cover":
-        hash = field_data["image_id"]
-        for qual in DOWNLOAD_QUALITY[field]:
-            res = IGDB_client.images(qual[0], hash)
-            with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", "wb") as f:
-                f.write(res)
-    else:
-        for el in field_data:
-            hash = el["image_id"]
-            for qual in DOWNLOAD_QUALITY[field]:
-                res = IGDB_client.images(qual[0], hash)
-                with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", "wb") as f:
-                    f.write(res)
+def image_downloader(IGDB_client, field, media):
+    hash = media["image_id"]
+    for qual in DOWNLOAD_QUALITY[field]:
+        res = IGDB_client.images(qual[0], hash)
+        with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", "wb") as f:
+            f.write(res)
 
 
 class iris:
     def __init__(self, r, r_games):
 
         self.rcli = r_games
-        # level 1 data -> raw data, no need for other requests
-        self.lvl_1_data = [
-            "category",
-            "first_release_date",
-            "name",
-            "rating",
-            "slug",
-            "summary",
-        ]
-        # level 2 data -> refer to other games, no need for other requests
-        self.lvl_2_data = [
-            "dlcs",
-            "expansions",
-            "expanded_games",
-            "similar_games",
-            "standalone_expansions",
-        ]
-        # level 3 data -> need other requests
-        self.lvl_3_data = [
-            "alternative_names",
-            "artworks",
-            "collection",
-            "cover",
-            "franchise",
-            "genres",
-            "involved_companies",
-            "keywords",
-            "themes",
-            "screenshots",
-        ]
         # cache level -> data replicate in redis db 1
         self.cache_level = ["name", "slug", "summary", "cover", "screenshots"]
-        # download level -> need to download content
-        self.download_level = ["artworks", "cover", "screenshots"]
 
         try:
             self.conn = psycopg2.connect(
@@ -227,22 +116,123 @@ class iris:
                     logging.debug(field)
                     field_data = game_data[0][field]
                     field_schema_data = SQL_schema.get(field)
+                    field_type = field_schema_data.get('type')
                     
                     #-- Game table root column --#
-                    if field_schema_data.get('type') == 'base':
+                    if field_type == 'base':
                         
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
                                 field=sql.Identifier(field_schema_data.get('field')))
-                        data = (field_data, gameID)
+                        data = (field_data, gameID,)
                         curs.execute(query, data)
                         
                     #-- Game table root column but type date --# 
-                    if field_schema_data.get('type') == 'date':
+                    elif field_type == 'date':
                         
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
                                 field=sql.Identifier(field_schema_data.get('field')))
-                        data = (datetime.fromtimestamp(field_data), gameID)
+                        data = (datetime.fromtimestamp(field_data), gameID,)
                         curs.execute(query, data)
+                        
+                    #-- Game table root column but type date --# 
+                    elif field_type == 'extra':
+                        for extra_data in field_data:
+                            if not self.existInDB(curs, "game", extra_data["id"]):
+                                query = sql.SQL("INSERT INTO iris.game (id, complete, name) VALUES (%s,False,%s);")
+                                data = (extra_data["id"], extra_data["name"],)
+                                curs.execute(query, data)
+                                
+                                self.rcli.json().set(f"games:{extra_data['id']}", "$",{"complete": False, "name": extra_data["name"]},)
+
+                            query = sql.SQL("INSERT INTO iris.{table} (game_id, extra_id, type) VALUES (%s,%s,%s);").format(
+                                    table=sql.Identifier(field_schema_data.get('field')))
+                            data = (gameID, extra_data["id"], field,)
+                            curs.execute(query, data)
+
+                    #-- Game table root column and external table --#    
+                    elif field_type == 'base-ext':
+                        
+                        #-- Insert data to external linked table --# 
+                        query = sql.SQL("INSERT INTO iris.{table} ({fields}) VALUES ({values}) ON CONFLICT DO NOTHING;").format(
+                                table=sql.Identifier(field_schema_data.get('field')),
+                                fields=sql.SQL(',').join(sql.Identifier(nfield) for nfield in field_data.keys()),
+                                values=sql.SQL(', ').join(sql.Placeholder()*len(field_data)),
+                            )
+                        data = [*field_data.values()]
+                        curs.execute(query, data)
+                        
+                        #-- Update root game table --# 
+                        query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
+                                field=sql.Identifier(field_schema_data.get('base_field')))
+                        data = (field_data["id"], gameID,)
+                        curs.execute(query, data)
+                        
+                    #-- Company and involved companies tables --#    
+                    elif field_type == 'company':
+                        
+                        company_data: list = self.IGDB_client.companies(field_data)
+                        logging.debug(field)
+                        for company in company_data:
+                            query = sql.SQL("INSERT INTO iris.{table} (id, name, slug, description, logo_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING;").format(
+                                    table=sql.Identifier(field_schema_data.get('sub_field')),
+                                )
+                            data = (
+                                company.get("id"),
+                                company.get("name"),
+                                company.get("slug"),
+                                company.get("description"),
+                                company.get("logo", {}).get("image_id"),
+                            )
+                            curs.execute(query, data)
+                            
+                        for involved_company in field_data:
+                            
+                            query = sql.SQL("INSERT INTO iris.{table} (game_id, company_id, developer, porting, publisher, supporting) VALUES (%s,%s,%s,%s,%s,%s);").format(
+                                    table=sql.Identifier(field_schema_data.get('field')),
+                                )
+                            data = (
+                                gameID,
+                                involved_company.get("company"),
+                                involved_company.get("developer"),
+                                involved_company.get("porting"),
+                                involved_company.get("publisher"),
+                                involved_company.get("supporting"),
+                            )
+                            curs.execute(query, data)
+                            
+                    #-- Media tables (screenshots, artworks, cover) --#
+                    elif field_type == 'media':
+                        
+                        def insert_media(media):
+                            query = sql.SQL("INSERT INTO iris.{table} (image_id, game_id, type, height, width) VALUES (%s,%s,%s,%s,%s);").format(
+                                    table=sql.Identifier(field_schema_data.get('field')),
+                                )
+                            data = (
+                                media.get("image_id"),
+                                gameID,
+                                field,
+                                media.get("height"),
+                                media.get("width"),
+                            )
+                            curs.execute(query, data)
+                            thread = threading.Thread(target=image_downloader, args=(self.IGDB_client, field, media))
+                            thread.start()
+                        
+                        if isinstance(field_data, list):
+                            for media in field_data: insert_media(media)
+                        else:
+                            insert_media(field_data)
+                            
+                    #-- All other tables --#
+                    elif field_type == 'normal':
+                        for elmt_data in field_data:
+                            query = sql.SQL("INSERT INTO iris.{table} (game_id,{fields}) VALUES ({values});").format(
+                                    table=sql.Identifier(field_schema_data.get('field')),
+                                    fields=sql.SQL(',').join(sql.Identifier(nfield) for nfield in ([*elmt_data.keys()])[1:]),
+                                    values=sql.SQL(', ').join(sql.Placeholder()*len(elmt_data)),
+                                )
+                            data = [gameID, *([*elmt_data.keys()])[1:]]
+                            curs.execute(query, data)
 
         self.conn.commit()
 
@@ -250,21 +240,17 @@ class iris:
 
         with self.conn.cursor() as curs:
 
-            medias_hash = []
-            for table in MEDIA_TABLES:
-                curs.execute(
-                    f"SELECT image_id FROM iris.{table} WHERE game_id = {gameID}"
-                )
-                res = curs.fetchall()
-                for hash in res:
-                    medias_hash.append(hash[0])
+            query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s;")
+            curs.execute(query, (gameID,))
+            res = curs.fetchall()
+            medias_hash = [hash[0] for hash in res]
 
             requests.delete(
                 "http://triton:5110/del_media", data=json.dumps({"medias": medias_hash})
             )
             
             inCache = self.existInCache(gameID)
-            inDB = self.existInDB(curs, "games", gameID)
+            inDB = self.existInDB(curs, "game", gameID)
             
             if inCache:
                 gameName = self.rcli.json().get(f"games:{gameID}", "$.name")[0]
@@ -273,11 +259,14 @@ class iris:
                     'name': gameName
                 })
                 
-            if inDB:
+            if inDB: 
                 for table in GAMEID_TABLES:
-                    curs.execute(f"DELETE FROM iris.{table} WHERE game_id = {gameID}")
+                    query = sql.SQL("DELETE FROM iris.{table} WHERE game_id = %s;").format(
+                            table=sql.Identifier(table))
+                    curs.execute(query, (gameID,))
 
-                curs.execute(f"UPDATE iris.games SET {CLEAR_GAME} WHERE id = {gameID}")
+                query = sql.SQL("UPDATE iris.game SET category = null, collection_id = null, complete = false, first_release_date = null, parent_game = null, rating = null, slug = null, summary = null WHERE id=%s;")
+                curs.execute(query, (gameID,))
 
         self.conn.commit()
 

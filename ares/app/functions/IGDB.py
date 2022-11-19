@@ -90,27 +90,35 @@ class IGDB():
         return {"data": parsed_IGDB_res}
 
     def companies(self, field_data):
-        final_data = []
+        # final_data = []
 
-        for company in field_data:
-            company_id = company['company']
-            IGDB_res = requests.post('https://api.igdb.com/v4/companies',
-                                     headers=self.req_header,
-                                     data="""fields description, 
-                                            logo.image_id, 
-                                            name, slug;
-                                            where id={0};""".format(company_id))
-            parsed_IGDB_res = json.loads(IGDB_res.text)
-            # parsed_IGDB_res[0]['logo'] = parsed_IGDB_res[0]['logo']['image_id']
+        # for company in field_data:
+        #     company_id = company['company']
+        #     IGDB_res = requests.post('https://api.igdb.com/v4/companies',
+        #                              headers=self.req_header,
+        #                              data="""fields description, 
+        #                                     logo.image_id, 
+        #                                     name, slug;
+        #                                     where id={0};""".format(company_id))
+        #     parsed_IGDB_res = json.loads(IGDB_res.text)
+        #     # parsed_IGDB_res[0]['logo'] = parsed_IGDB_res[0]['logo']['image_id']
 
-            if parsed_IGDB_res[0] and parsed_IGDB_res[0].get("logo"):
-                parsed_IGDB_res[0]['logo'] = parsed_IGDB_res[0]['logo']['image_id']
-            else:
-                parsed_IGDB_res[0]['logo'] = None
-            final_data.append(
-                {'companies': parsed_IGDB_res[0], 'involved_companies': company})
+        #     if parsed_IGDB_res[0] and parsed_IGDB_res[0].get("logo"):
+        #         parsed_IGDB_res[0]['logo'] = parsed_IGDB_res[0]['logo']['image_id']
+        #     else:
+        #         parsed_IGDB_res[0]['logo'] = None
+        #     final_data.append(
+        #         {'companies': parsed_IGDB_res[0], 'involved_companies': company})
 
-        return final_data
+        # return final_data
+
+        res = requests.post('https://api.igdb.com/v4/companies',
+                                headers=self.req_header,
+                                data=("fields description, logo.image_id, name, slug; where id=({companies});").format(
+                                    companies=','.join([str(company['company']) for company in field_data])
+                                ))
+    
+        return json.loads(res.text)
 
     def images(self, size, hash):
         IGDB_res = requests.get('https://images.igdb.com/igdb/image/upload/t_{0}/{1}.jpg'.format(

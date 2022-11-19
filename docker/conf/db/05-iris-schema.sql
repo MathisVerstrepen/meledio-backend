@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS iris AUTHORIZATION supabase_admin;
 -- --------------------collection-------------------- --
 
 CREATE TABLE iris.collection (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "name" text,
   "slug" text
 );
@@ -11,14 +11,14 @@ CREATE TABLE iris.collection (
 -- --------------------category-------------------- --
 
 CREATE TABLE iris.category (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "name" text
 );
 
 -- --------------------game-------------------- --
 
 CREATE TABLE iris.game (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "name" text,
   "slug" text,
   "complete" boolean,
@@ -51,7 +51,7 @@ ALTER TABLE iris.extra_content ADD FOREIGN KEY ("extra_id") REFERENCES iris.game
 -- --------------------alternative name-------------------- --
 
 CREATE TABLE iris.alternative_name (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "game_id" int,
   "name" text,
   "comment" text
@@ -127,7 +127,7 @@ ALTER TABLE iris.genre ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
 -- --------------------company-------------------- --
 
 CREATE TABLE iris.company (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "name" text,
   "slug" text,
   "description" text,
@@ -151,7 +151,7 @@ ALTER TABLE iris.involved_companies ADD FOREIGN KEY ("company_id") REFERENCES ir
 -- --------------------keyword-------------------- --
 
 CREATE TABLE iris.keyword (
-  "id" int PRIMARY KEY,
+  "id" SERIAL PRIMARY KEY,
   "game_id" int,
   "name" text,
   "slug" text

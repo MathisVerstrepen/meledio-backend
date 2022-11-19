@@ -28,63 +28,65 @@
         "field" : "summary"
     },
     "dlcs": {
-        "type" : "",
-        "field" : ""
+        "type" : "extra",
+        "field" : "extra_content"
     },
     "expansions": {
-        "type" : "",
-        "field" : ""
+        "type" : "extra",
+        "field" : "extra_content"
     },
     "expanded_games": {
-        "type" : "",
-        "field" : ""
+        "type" : "extra",
+        "field" : "extra_content"
     },
     "similar_games": {
-        "type" : "",
-        "field" : ""
+        "type" : "extra",
+        "field" : "extra_content"
     },
     "standalone_expansions": {
-        "type" : "",
-        "field" : ""
+        "type" : "extra",
+        "field" : "extra_content"
     },
     "alternative_names": {
-        "type" : "",
-        "field" : ""
+        "type" : "normal",
+        "field" : "alternative_name"
     },
     "artworks": {
-        "type" : "",
-        "field" : ""
+        "type" : "media",
+        "field" : "media"
     },
     "collection": {
-        "type" : "",
-        "field" : ""
+        "type" : "base-ext",
+        "field" : "collection",
+        "base_field": "collection_id"
     },
     "cover": {
-        "type" : "",
-        "field" : ""
+        "type" : "media",
+        "field" : "media"
     },
     "franchise": {
         "type" : "",
         "field" : ""
     },
     "genres": {
-        "type" : "",
-        "field" : ""
+        "type" : "normal",
+        "field" : "genre"
     },
     "involved_companies": {
-        "type" : "",
-        "field" : ""
+        "type" : "company",
+        "field" : "involved_companies",
+        "sub_field" : "company"
     },
     "keywords": {
-        "type" : "",
-        "field" : ""
+        "type" : "normal",
+        "field" : "keyword"
     },
     "themes": {
-        "type" : "",
-        "field" : ""
+        "type" : "normal",
+        "field" : "theme"
     },
     "screenshots": {
-        "type" : "",
-        "field" : ""
+        "type" : "media",
+        "field" : "media"
     }
 }
