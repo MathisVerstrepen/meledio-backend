@@ -13,3 +13,4 @@ rich
 selenium
 webdriver-manager
 yt_dlp
+awesome-slugify

@@ -9,6 +9,10 @@ from datetime import timedelta
 import uuid
 from multiprocessing import Pool
 import psycopg2
+import psycopg2.extensions
+from psycopg2 import sql
+from slugify import slugify
+import logging
 
 
 def extract_video_info(data) -> str:
@@ -25,15 +29,6 @@ def extract_video_info(data) -> str:
                 ['sectionListRenderer']['contents'][0]['itemSectionRenderer']['contents'])
 
     return renderer
-
-
-def push_song_db(gameID, title, file, conn):
-    with conn.cursor() as curs:
-        curs.execute(
-            "INSERT INTO iris.albums (game_id, file, title) VALUES ({0},E'{1}',E'{2}')".format(
-                gameID, title.replace("'", "''"), file
-            ))
-
 
 class chapter_scrap():
     def __init__(self, id: str) -> None:
@@ -206,6 +201,17 @@ class chapter_scrap():
 
         return line[start_index:end_index+1].strip()
 
+class LoggingCursor(psycopg2.extensions.cursor):
+    def execute(self, sql, args=None):
+        logger = logging.getLogger('sql_debug')
+        logger.info(self.mogrify(sql, args))
+
+        try:
+            psycopg2.extensions.cursor.execute(self, sql, args)
+        except Exception as exc:
+            logger.error("%s: %s" % (exc.__class__.__name__, exc))
+            raise
+
 
 class s1():
     def __init__(self) -> None:
@@ -313,40 +319,44 @@ class s1():
 
         return vid_dur
 
-    def file_formater(self, vidID: str, gameID: int, chapters: list, vid_dur:int, r_games) -> list:
-        tracklist = []
-        subprocess_list = []
-        len_chapter = len(chapters)
-        range_len_chapter = range(len_chapter)
+    def file_formater(self, gameID: int, chapters: list, vid_dur:int, r_games) -> list:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-        for i in range_len_chapter:
-            chapter = chapters[i]
-            start = chapter['timestamp']
-            if i >= len_chapter - 1:
-                end = vid_dur
-            else:
-                end = chapters[i+1]['timestamp']
+            game_name_slug = r_games.json().get(f"g:{gameID}", '$.slug')
+            subprocess_list = []
+            tracklist = []
+            
+            for i in range(len(chapters)):
+                
+                file_uuid = uuid.uuid4().hex
+                start = chapters[i]['timestamp']
+                end = vid_dur if i >= len(chapters)-1 else chapters[i+1]['timestamp']
 
-            file_uuid = uuid.uuid4()
-            file_name = f'{str(file_uuid)}'
+                query = sql.SQL("INSERT INTO iris.track (game_id, title, slug, file, view_count, like_count, length) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;")
+                data = (gameID, chapters[i]['title'], slugify(chapters[i]['title']), file_uuid, 0, 0, end-start)
+                curs.execute(query, data)
+                track_id = curs.fetchall()[0][0]
+                
+                query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
+                data = (gameID, track_id, "Full Album", slugify(game_name_slug[0] + " full album"))
+                curs.execute(query, data)
 
-            p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
-                            str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy', '-y', f'/bacchus/audio/{gameID}/{file_name}.m4a'], shell=False,
-                            stdin=None, stdout=None, stderr=None, close_fds=True)
-            subprocess_list.append(p)
+                p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
+                                str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy', '-y', f'/bacchus/audio/{gameID}/{file_uuid}.m4a'], shell=False,
+                                stdin=None, stdout=None, stderr=None, close_fds=True)
+                subprocess_list.append(p)
 
-            track = {
-                'title': chapter['title'],
-                'file': file_name
-            }
-            r_games.json().arrappend(f"games:{gameID}", '$.album', track)
-            tracklist.append(track)
-
-        push_song_db(gameID, chapter['title'], file_name, self.conn)
+                tracklist.append({
+                    'title': chapters[i]['title'],
+                    'file': file_uuid
+                })
 
         [p.wait() for p in subprocess_list]
 
-        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
+        # os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
+        
+        r_games.json().set(f"g:{gameID}", "$.album", tracklist)
         self.conn.commit()
 
         return tracklist

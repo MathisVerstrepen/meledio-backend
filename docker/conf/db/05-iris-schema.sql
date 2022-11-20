@@ -59,19 +59,6 @@ CREATE TABLE iris.alternative_name (
 
 ALTER TABLE iris.alternative_name ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
 
--- --------------------album-------------------- --
-
-CREATE TABLE iris.album (
-  "id" SERIAL PRIMARY KEY,
-  "game_id" int,
-  "name" text,
-  "slug" text,
-  "folder" int,
-  "n_track" int
-);
-
-ALTER TABLE iris.album ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
-
 -- --------------------track-------------------- --
 
 CREATE TABLE iris.track (
@@ -79,13 +66,26 @@ CREATE TABLE iris.track (
   "game_id" int,
   "title" text,
   "slug" text,
-  "file" text,
+  "file" uuid,
   "view_count" int,
   "like_count" int,
   "length" int
 );
 
 ALTER TABLE iris.track ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
+
+-- --------------------album-------------------- --
+
+CREATE TABLE iris.album (
+  "id" SERIAL PRIMARY KEY,
+  "game_id" int,
+  "track_id" int,
+  "name" text,
+  "slug" text
+);
+
+ALTER TABLE iris.album ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
+ALTER TABLE iris.album ADD FOREIGN KEY ("track_id") REFERENCES iris.track ("id");
 
 -- --------------------playlist-------------------- --
 

@@ -15,6 +15,8 @@ load_dotenv()
 
 f = open('./app/functions/json/sql_game_schema.json')
 SQL_schema: dict = json.load(f)
+f = open('./app/functions/json/category.json')
+SQL_category: dict = json.load(f)
 
 class LoggingCursor(psycopg2.extensions.cursor):
     def execute(self, sql, args=None):
@@ -64,8 +66,6 @@ class iris:
     def __init__(self, r, r_games):
 
         self.rcli = r_games
-        # cache level -> data replicate in redis db 1
-        self.cache_level = ["name", "slug", "summary", "cover", "screenshots"]
 
         try:
             self.conn = psycopg2.connect(
@@ -80,12 +80,13 @@ class iris:
             self.conn = None
             
     def existInCache(self, gameID: str):
-        return self.rcli.json().get(f"games:{gameID}", "$.complete")
+        return self.rcli.json().get(f"g:{gameID}", "$.complete")
 
     def existInDB(self, curs, table, id):
-        curs.execute("SELECT complete FROM iris.{0} where id={1};".format(table, id))
-        fetch_res = curs.fetchone()
-        return fetch_res
+        query = sql.SQL("SELECT complete FROM iris.{table} where id=%s;").format(
+                table=sql.Identifier(table))
+        curs.execute(query, (id,))
+        return curs.fetchone()
 
 
     def push_new_game(self, game_data):
@@ -93,23 +94,20 @@ class iris:
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-            inCache = self.existInCache(gameID)
-            inDB = self.existInDB(curs, "game", gameID)
+            INCACHE = self.existInCache(gameID)
+            INDB = self.existInDB(curs, "game", gameID)
             
-            logging.debug(inCache)
-            logging.debug(inDB)
-            
-            if inCache == None:
+            if INCACHE == None:
                 #-- Construct base cache data --#
-                self.rcli.json().set(f"games:{gameID}", "$", {'complete': False})
+                self.rcli.json().set(f"g:{gameID}", "$", {'complete': False})
 
-            if not inDB:
+            if not INDB:
                 #-- Contruct base db data --# 
                 query = "INSERT INTO iris.game (id) VALUES (%s);"
                 data = (gameID, )
                 curs.execute(query, data)
 
-            if not inDB or not inDB[0] or inCache == None or not all(inCache):
+            if not INDB or not INDB[0] or INCACHE == None or not all(INCACHE):
                 #-- Upload all metadata to DB and cache --#
                 
                 for field in game_data[0]:
@@ -125,6 +123,9 @@ class iris:
                                 field=sql.Identifier(field_schema_data.get('field')))
                         data = (field_data, gameID,)
                         curs.execute(query, data)
+                        
+                        cache_data = field_data if field != 'category' else SQL_category.get(str(field_data))
+                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", cache_data)
                         
                     #-- Game table root column but type date --# 
                     elif field_type == 'date':
@@ -142,7 +143,7 @@ class iris:
                                 data = (extra_data["id"], extra_data["name"],)
                                 curs.execute(query, data)
                                 
-                                self.rcli.json().set(f"games:{extra_data['id']}", "$",{"complete": False, "name": extra_data["name"]},)
+                                self.rcli.json().set(f"g:{extra_data['id']}", "$",{"complete": False, "name": extra_data["name"]},)
 
                             query = sql.SQL("INSERT INTO iris.{table} (game_id, extra_id, type) VALUES (%s,%s,%s);").format(
                                     table=sql.Identifier(field_schema_data.get('field')))
@@ -215,13 +216,17 @@ class iris:
                                 media.get("width"),
                             )
                             curs.execute(query, data)
+                            
                             thread = threading.Thread(target=image_downloader, args=(self.IGDB_client, field, media))
                             thread.start()
                         
                         if isinstance(field_data, list):
-                            for media in field_data: insert_media(media)
+                            for media in field_data: 
+                                insert_media(media)
+                            self.rcli.json().set(f"g:{gameID}", f"$.{field}", [media.get("image_id") for media in field_data])
                         else:
                             insert_media(field_data)
+                            self.rcli.json().set(f"g:{gameID}", f"$.{field}", field_data.get("image_id"))
                             
                     #-- All other tables --#
                     elif field_type == 'normal':
@@ -234,6 +239,12 @@ class iris:
                             data = [gameID, *([*elmt_data.keys()])[1:]]
                             curs.execute(query, data)
 
+                    query = sql.SQL("UPDATE iris.game SET complete = true WHERE id=%s;")
+                    data = (gameID,)
+                    curs.execute(query, data)
+                    
+                    self.rcli.json().set(f"g:{gameID}", "$.complete", True)
+                
         self.conn.commit()
 
     def del_game(self, gameID: int) -> bool:
@@ -253,8 +264,8 @@ class iris:
             inDB = self.existInDB(curs, "game", gameID)
             
             if inCache:
-                gameName = self.rcli.json().get(f"games:{gameID}", "$.name")[0]
-                self.rcli.json().set(f"games:{gameID}", "$", {
+                gameName = self.rcli.json().get(f"g:{gameID}", "$.name")[0]
+                self.rcli.json().set(f"g:{gameID}", "$", {
                     'complete': False,
                     'name': gameName
                 })
