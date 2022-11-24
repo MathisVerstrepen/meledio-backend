@@ -41,7 +41,7 @@ async def get_best_matching_games(
 
 
 @triton.delete("/del_media")
-async def get_best_matching_games(body: dict = Body(...)) -> dict:
+async def delete_media(body: dict = Body(...)) -> dict:
     medias = body.get('medias')
     nfile = 0
     if medias:

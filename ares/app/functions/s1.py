@@ -72,6 +72,7 @@ class chapter_scrap():
         try:
             desc = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
                     ['contents'][1]['videoSecondaryInfoRenderer']['description']['runs'])
+            logging.debug(desc)
         except Exception as e:
             chapter_data = None
         else:
@@ -130,60 +131,41 @@ class chapter_scrap():
             comments = (r_parse['onResponseReceivedEndpoints']
                         [1]['reloadContinuationItemsCommand']['continuationItems'])
 
-            found = False
             comment_index = 0
-            while not found and comment_index <= len(comments)-1:
-                comment = comments[comment_index]
-                comment_index += 1
-                isComment = comment.get('commentThreadRenderer')
+            while comment_index >= 0 and comment_index <= len(comments)-1:
+                isComment = comments[comment_index].get('commentThreadRenderer')
+                
                 if isComment:
                     com_parts = isComment['comment']['commentRenderer']['contentText']['runs']
 
                     chapter_data = []
-                    already_link = False
-                    link_count = 0
+                    ncom = len(com_parts)
                     index = 0
-
-                    for com_part in com_parts:
-
-                        if '\n' in com_parts[index]["text"]:
-                            already_link = False
-
-                        NavEndpoint = com_part.get('navigationEndpoint')
-                        if NavEndpoint:
-
-                            link_count += 1
-                            WatchEndpoint = NavEndpoint.get('watchEndpoint')
-
-                            if WatchEndpoint and not already_link:
-
-                                tempi = index - 1
-                                while not '\n' in com_parts[tempi]["text"]:
-                                    tempi -= 1
-                                prevLine = (
-                                    com_parts[tempi]["text"].split('\n')[-1])
-
-                                tempi = index + 1
-                                nextLine = ""
-                                while tempi < len(com_parts) - 1 and not '\n' in com_parts[tempi]["text"]:
-                                    nextLine += com_parts[tempi]["text"]
-                                    tempi += 1
-                                if not nextLine:
-                                    nextLine = (
-                                        com_parts[tempi - 1]["text"].split('\n')[0])
-
-                                title = self.format_line(prevLine + nextLine)
-
-                                chapter_data.append({
-                                    'title': title,
-                                    'timestamp': WatchEndpoint['startTimeSeconds']
-                                })
-
-                                already_link = True
-                        index += 1
-
-                    if link_count > 3:
-                        found = True
+                    
+                    while (index < ncom):
+                        
+                        hasNavigationEndpoint = False
+                        
+                        nextIndex = index + 1
+                        while nextIndex < ncom and not '\n' in com_parts[nextIndex].get('text'): 
+                            if com_parts[nextIndex].get('navigationEndpoint') : 
+                                hasNavigationEndpoint = True
+                                watchEndpoint = com_parts[nextIndex].get('navigationEndpoint').get('watchEndpoint', {}).get('startTimeSeconds')
+                            nextIndex += 1
+                        
+                        if hasNavigationEndpoint:
+                            
+                            fullRowElt = [com_parts[tmpIndex].get('text') for tmpIndex in range(index, nextIndex)]
+                            
+                            chapter_data.append({
+                                'title': self.format_line(' '.join(fullRowElt)),
+                                'timestamp': watchEndpoint
+                            })
+                        
+                        index = nextIndex
+                        
+                    if len(chapter_data) > 3: comment_index = -1
+                    else : comment_index += 1
 
         return chapter_data
 
@@ -283,12 +265,15 @@ class s1():
         chapter_turtle = chapter_scrap(id)
 
         chapter_data = chapter_turtle.by_youtube_data()
+        logging.debug(chapter_data)
 
         if not chapter_data:
             chapter_data = chapter_turtle.by_video_desc()
+            logging.debug(chapter_data)
 
         if not chapter_data:
             chapter_data = chapter_turtle.by_video_comments()
+            logging.debug(chapter_data)
 
         return chapter_data
 

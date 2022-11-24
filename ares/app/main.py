@@ -125,7 +125,7 @@ def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_sch
 
 @ares.delete("/del/game")
 @limiter.limit("60/minute")
-def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
+def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
 
     auth(token)
 
@@ -173,6 +173,7 @@ def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(
     res_name = r_games.json().get(f"g:{gameID}", "$.name")
     if res_name:
         res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
+        res_s1_chapter = False
         if not res_s1_chapter:
             s1_client = s1()
             res = s1_client.get_chapter(id)
