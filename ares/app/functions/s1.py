@@ -13,6 +13,7 @@ import psycopg2.extensions
 from psycopg2 import sql
 from slugify import slugify
 import logging
+import re
 
 
 def extract_video_info(data) -> str:
@@ -48,19 +49,51 @@ class chapter_scrap():
         #     f'/ares/app/functions/json-{id}.json', 'w')
         # f.write(json.dumps(self.vid_meta))
         # f.close()
+        
+    def extract_chapter_data(self, text):
+        chapter_data = []
+        ntext = len(text)
+        index = 0
+        
+        while (index < ntext):
+            
+            hasNavigationEndpoint = False
+            
+            nextIndex = index + 1
+            while nextIndex < ntext and not '\n' in text[nextIndex].get('text'): 
+                logging.debug(text[nextIndex].get('text'))
+                if text[nextIndex].get('navigationEndpoint'): 
+                    watchEndpoint = text[nextIndex].get('navigationEndpoint').get('watchEndpoint', {}).get('startTimeSeconds')
+                    if watchEndpoint != None : hasNavigationEndpoint = True
+                    
+                nextIndex += 1
+            
+            if hasNavigationEndpoint:
+                
+                fullRowElt = [text[tmpIndex].get('text') for tmpIndex in range(index+1, min(nextIndex + 1, ntext))]
+                logging.debug(fullRowElt)
+                
+                chapter_data.append({
+                    'title': self.format_line(fullRowElt),
+                    'timestamp': watchEndpoint
+                })
+            
+            index = nextIndex
+            
+        return chapter_data
+        
 
     def by_youtube_data(self):
 
         try:
             chapters = (self.vid_meta['playerOverlays']['playerOverlayRenderer']['decoratedPlayerBarRenderer']
                         ['decoratedPlayerBarRenderer']['playerBar']['multiMarkersPlayerBarRenderer']['markersMap'][0]['value']['chapters'])
-        except Exception as e:
+        except Exception:
             chapter_data = None
         else:
             chapter_data = []
             for chapter in chapters:
-                title = self.format_line(
-                    chapter['chapterRenderer']['title']['simpleText'])
+                title = self.format_line([chapter['chapterRenderer']['title']['simpleText']])
                 chapter_data.append({
                     'title': title,
                     'timestamp': chapter['chapterRenderer']['timeRangeStartMillis'] / 1000
@@ -73,43 +106,10 @@ class chapter_scrap():
             desc = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
                     ['contents'][1]['videoSecondaryInfoRenderer']['description']['runs'])
             logging.debug(desc)
-        except Exception as e:
+        except Exception:
             chapter_data = None
         else:
-            chapter_data = []
-            index = 0
-            already_link = False
-
-            for el in desc:
-                if '\n' in desc[index]["text"]:
-                    already_link = False
-
-                NavigationEndpoint = el.get('navigationEndpoint')
-                if NavigationEndpoint:
-
-                    WatchEndpoint = NavigationEndpoint.get('watchEndpoint')
-                    if WatchEndpoint and not already_link:
-
-                        tempi = index - 1 
-                        while not '\n' in desc[tempi]["text"]:
-                            tempi -= 1
-                        previousLine = desc[tempi]["text"].split('\n')[-1]
-
-                        tempi = index if index <= len(desc) -1 else index + 1
-                        while tempi < len(desc) - 1 and not '\n' in desc[tempi]["text"]:
-                            tempi += 1
-                        nextLine = desc[tempi]["text"].split('\n')[0]
-                        if not nextLine:
-                            nextLine = desc[tempi-1]["text"].split('\n')[0]
-
-                        title = self.format_line(previousLine + nextLine)
-                        chapter_data.append({
-                            'title': title,
-                            'timestamp': WatchEndpoint['startTimeSeconds']
-                        })
-
-                        already_link = True
-                index += 1
+            chapter_data = self.extract_chapter_data(desc)
 
         return chapter_data
 
@@ -137,51 +137,31 @@ class chapter_scrap():
                 
                 if isComment:
                     com_parts = isComment['comment']['commentRenderer']['contentText']['runs']
-
-                    chapter_data = []
-                    ncom = len(com_parts)
-                    index = 0
-                    
-                    while (index < ncom):
-                        
-                        hasNavigationEndpoint = False
-                        
-                        nextIndex = index + 1
-                        while nextIndex < ncom and not '\n' in com_parts[nextIndex].get('text'): 
-                            if com_parts[nextIndex].get('navigationEndpoint') : 
-                                hasNavigationEndpoint = True
-                                watchEndpoint = com_parts[nextIndex].get('navigationEndpoint').get('watchEndpoint', {}).get('startTimeSeconds')
-                            nextIndex += 1
-                        
-                        if hasNavigationEndpoint:
-                            
-                            fullRowElt = [com_parts[tmpIndex].get('text') for tmpIndex in range(index, nextIndex)]
-                            
-                            chapter_data.append({
-                                'title': self.format_line(' '.join(fullRowElt)),
-                                'timestamp': watchEndpoint
-                            })
-                        
-                        index = nextIndex
+                    chapter_data = self.extract_chapter_data(com_parts)
                         
                     if len(chapter_data) > 3: comment_index = -1
                     else : comment_index += 1
 
         return chapter_data
 
-    def format_line(self, line: str) -> str:
-        line = line.strip()
-        line_len = len(line)
+    def format_line(self, lline: str) -> str:
+        logging.debug(lline)
+        for lpart in lline:
+            lpart = lpart.split('\n')[0].strip()
+            part_len = len(lpart)
+                
+            if re.search('[a-zA-Z]', lpart):
+        
+                start_index = 0
+                while start_index < part_len and not lpart[start_index].isalpha():
+                    start_index += 1
 
-        start_index = 0
-        while start_index < line_len and not line[start_index].isalpha():
-            start_index += 1
+                end_index = part_len - 1
+                while end_index > start_index and not lpart[end_index].isalpha() and not lpart[end_index].isnumeric():
+                    end_index -= 1
 
-        end_index = line_len - 1
-        while end_index > start_index and not line[end_index].isalpha():
-            end_index -= 1
-
-        return line[start_index:end_index+1].strip()
+                return lpart[start_index:end_index+1]
+                
 
 class LoggingCursor(psycopg2.extensions.cursor):
     def execute(self, sql, args=None):
@@ -339,7 +319,7 @@ class s1():
 
         [p.wait() for p in subprocess_list]
 
-        # os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
+        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         
         r_games.json().set(f"g:{gameID}", "$.album", tracklist)
         self.conn.commit()

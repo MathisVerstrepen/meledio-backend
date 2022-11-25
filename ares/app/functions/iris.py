@@ -52,6 +52,7 @@ GAMEID_TABLES = [
     "involved_companies",
     "keyword",
     "theme",
+    "track"
 ]
 
 def image_downloader(IGDB_client, field, media):
