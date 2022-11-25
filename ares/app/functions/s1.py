@@ -58,31 +58,42 @@ class chapter_scrap():
         while (index < ntext):
             
             hasNavigationEndpoint = False
+            watchEndpoint = -1
             
             nextIndex = index + 1
             while nextIndex < ntext and not '\n' in text[nextIndex].get('text'): 
-                logging.debug(text[nextIndex].get('text'))
+                # logging.debug(text[nextIndex].get('text'))
                 if text[nextIndex].get('navigationEndpoint'): 
-                    watchEndpoint = text[nextIndex].get('navigationEndpoint').get('watchEndpoint', {}).get('startTimeSeconds')
+                    if watchEndpoint == -1 : watchEndpoint = text[nextIndex].get('navigationEndpoint').get('watchEndpoint', {}).get('startTimeSeconds')
                     if watchEndpoint != None : hasNavigationEndpoint = True
                     
                 nextIndex += 1
             
             if hasNavigationEndpoint:
+                fullRowElt = []
                 
-                fullRowElt = [text[tmpIndex].get('text') for tmpIndex in range(index+1, min(nextIndex + 1, ntext))]
+                fullRowElt.append(text[index].get('text').split('\n')[-1])
+                
+                for tmpIndex in range(index + 1, nextIndex):
+                    logging.debug(text[tmpIndex].get('text'))
+                    fullRowElt.append(text[tmpIndex].get('text'))
+                    
+                if nextIndex < ntext : fullRowElt.append(text[nextIndex].get('text').split('\n')[0])
+                
                 logging.debug(fullRowElt)
+                
+                # if nextIndex < ntext : start_next_string = text[nextIndex].get('text').split('\n')[-1]
                 
                 chapter_data.append({
                     'title': self.format_line(fullRowElt),
                     'timestamp': watchEndpoint
                 })
-            
+                
+                watchEndpoint = -1
             index = nextIndex
             
         return chapter_data
         
-
     def by_youtube_data(self):
 
         try:
@@ -147,20 +158,21 @@ class chapter_scrap():
     def format_line(self, lline: str) -> str:
         logging.debug(lline)
         for lpart in lline:
-            lpart = lpart.split('\n')[0].strip()
-            part_len = len(lpart)
-                
-            if re.search('[a-zA-Z]', lpart):
-        
-                start_index = 0
-                while start_index < part_len and not lpart[start_index].isalpha():
-                    start_index += 1
+            if lpart:
+                lpart = lpart.split('\n')[0].strip() if (lpart.split('\n')[0]) else lpart.split('\n')[1].strip()
+                part_len = len(lpart)
+                    
+                if re.search('[a-zA-Z]', lpart):
+            
+                    start_index = 0
+                    while start_index < part_len and not lpart[start_index].isalpha():
+                        start_index += 1
 
-                end_index = part_len - 1
-                while end_index > start_index and not lpart[end_index].isalpha() and not lpart[end_index].isnumeric():
-                    end_index -= 1
+                    end_index = part_len - 1
+                    while end_index > start_index and not lpart[end_index].isalpha() and not lpart[end_index].isnumeric():
+                        end_index -= 1
 
-                return lpart[start_index:end_index+1]
+                    return lpart[start_index:end_index+1]
                 
 
 class LoggingCursor(psycopg2.extensions.cursor):
