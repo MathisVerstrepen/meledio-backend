@@ -54,6 +54,7 @@ class chapter_scrap():
         chapter_data = []
         ntext = len(text)
         index = 0
+        lastWatchEndpoint = -1
         
         while (index < ntext):
             
@@ -69,7 +70,7 @@ class chapter_scrap():
                     
                 nextIndex += 1
             
-            if hasNavigationEndpoint:
+            if hasNavigationEndpoint and lastWatchEndpoint < watchEndpoint:
                 fullRowElt = []
                 
                 fullRowElt.append(text[index].get('text').split('\n')[-1])
@@ -88,6 +89,7 @@ class chapter_scrap():
                     'title': self.format_line(fullRowElt),
                     'timestamp': watchEndpoint
                 })
+                lastWatchEndpoint = watchEndpoint
                 
                 watchEndpoint = -1
             index = nextIndex

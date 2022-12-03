@@ -237,7 +237,7 @@ class iris:
                                     fields=sql.SQL(',').join(sql.Identifier(nfield) for nfield in ([*elmt_data.keys()])[1:]),
                                     values=sql.SQL(', ').join(sql.Placeholder()*len(elmt_data)),
                                 )
-                            data = [gameID, *([*elmt_data.keys()])[1:]]
+                            data = [gameID, *([*elmt_data.values()])[1:]]
                             curs.execute(query, data)
 
                     query = sql.SQL("UPDATE iris.game SET complete = true WHERE id=%s;")
@@ -250,7 +250,7 @@ class iris:
 
     def del_game(self, gameID: int) -> bool:
 
-        with self.conn.cursor() as curs:
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
             query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s;")
             curs.execute(query, (gameID,))
@@ -282,6 +282,64 @@ class iris:
 
         self.conn.commit()
 
+    # def get_game_data(self, gID, table, columns):
+        
+    #     with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+    #         query = sql.SQL("SELECT  SET {field} = %s WHERE id=%s;").format(
+    #                 field=sql.Identifier(field_schema_data.get('field')))
+    #         data = (field_data, gameID,)
+    #         curs.execute(query, data)
+    
+    def get_base_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.game WHERE id=%s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchone()
+            column = ['id', 'name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
+
+            return {column[i]:res[i] for i in range(11)}
+        
+    def get_media_game_data(self, gameID, media_type) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.media WHERE game_id=%s AND type=%s;")
+            data = (gameID, media_type,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['image_id', 'game_id', 'type', 'height', 'width']
+
+            return [{column[i]:row[i] for i in range(5)} for row in res]
+        
+    def get_alternative_name_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.alternative_name WHERE game_id=%s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['id', 'game_id', 'name', 'comment']
+
+            return [{column[i]:row[i] for i in range(4)} for row in res]
+        
+    def get_album_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT album.id, name, album.slug, track_id, title, track.slug, file, view_count, like_count, length FROM iris.album JOIN iris.track ON iris.album.track_id = iris.track.id WHERE iris.album.game_id = %s AND iris.album.name = 'Full Album'")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
+            result = {
+                'id' : res[0][0],
+                'name' : res[0][1],
+                'slug' : res[0][2],
+                'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
+            }
+            
+
+            return result
 
 class iris_user:
     def __init__(self):
