@@ -115,7 +115,7 @@ class iris:
                     logging.debug(field)
                     field_data = game_data[0][field]
                     field_schema_data = SQL_schema.get(field)
-                    field_type = field_schema_data.get('type')
+                    field_type = field_schema_data.get('type') 
                     
                     #-- Game table root column --#
                     if field_type == 'base':
@@ -123,6 +123,8 @@ class iris:
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
                                 field=sql.Identifier(field_schema_data.get('field')))
                         data = (field_data, gameID,)
+                        logging.debug(query)
+                        logging.debug(data)
                         curs.execute(query, data)
                         
                         cache_data = field_data if field != 'category' else SQL_category.get(str(field_data))
@@ -136,7 +138,24 @@ class iris:
                         data = (datetime.fromtimestamp(field_data), gameID,)
                         curs.execute(query, data)
                         
-                    #-- Game table root column but type date --# 
+                    #-- Game table root column but parent game --# 
+                    elif field_type == 'parent':
+                        logging.debug(field_data)
+                        if not self.existInDB(curs, "game", field_data["id"]):
+                            query = sql.SQL("INSERT INTO iris.game (id, complete, name) VALUES (%s,False,%s);")
+                            data = (field_data["id"], field_data["name"],)
+                            curs.execute(query, data)
+                            
+                            self.rcli.json().set(f"g:{field_data['id']}", "$",{"complete": False, "name": field_data["name"]},)
+                        
+                        query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
+                                field=sql.Identifier(field_schema_data.get('field')))
+                        data = (field_data["id"], gameID,)
+                        curs.execute(query, data)
+                        
+                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", field_data["id"])
+                        
+                    #-- All sort of extra content of the game --# 
                     elif field_type == 'extra':
                         for extra_data in field_data:
                             if not self.existInDB(curs, "game", extra_data["id"]):
@@ -162,6 +181,8 @@ class iris:
                             )
                         data = [*field_data.values()]
                         curs.execute(query, data)
+                        
+                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('base_field')}", field_data.get('id'))
                         
                         #-- Update root game table --# 
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
@@ -281,14 +302,6 @@ class iris:
                 curs.execute(query, (gameID,))
 
         self.conn.commit()
-
-    # def get_game_data(self, gID, table, columns):
-        
-    #     with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-    #         query = sql.SQL("SELECT  SET {field} = %s WHERE id=%s;").format(
-    #                 field=sql.Identifier(field_schema_data.get('field')))
-    #         data = (field_data, gameID,)
-    #         curs.execute(query, data)
     
     def get_base_game_data(self, gameID) -> dict:
         
@@ -299,7 +312,9 @@ class iris:
             res = curs.fetchone()
             column = ['id', 'name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
 
-            return {column[i]:res[i] for i in range(11)}
+
+            if (res) : return {column[i]:res[i] for i in range(11)}
+            else : return {}
         
     def get_media_game_data(self, gameID, media_type) -> dict:
         
@@ -330,16 +345,73 @@ class iris:
             data = (gameID,)
             curs.execute(query, data)
             res = curs.fetchall()
-            column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
-            result = {
-                'id' : res[0][0],
-                'name' : res[0][1],
-                'slug' : res[0][2],
-                'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
-            }
             
-
+            result = {}
+            if (len(res)) :
+                column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
+                result = {
+                    'id' : res[0][0],
+                    'name' : res[0][1],
+                    'slug' : res[0][2],
+                    'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
+                }
+            
             return result
+        
+    def get_involved_companies_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT company_id, developer, porting, publisher, supporting, name, slug, description, logo_id FROM iris.involved_companies JOIN iris.company ON iris.involved_companies.company_id = iris.company.id WHERE iris.involved_companies.game_id = %s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id']
+            
+            return [{column[i]:row[i] for i in range(9)} for row in res]
+        
+    def get_extra_content_game_data(self, gameID, extra_type) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT extra_id FROM iris.extra_content WHERE game_id=%s AND type=%s;")
+            data = (gameID, extra_type,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+
+            return [row[0] for row in res]
+        
+    def get_genre_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT name,slug FROM iris.genre WHERE iris.genre.game_id = %s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['name', 'slug']
+            
+            return [{column[i]:row[i] for i in range(2)} for row in res]
+        
+    def get_theme_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT name,slug FROM iris.theme WHERE iris.theme.game_id = %s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['name', 'slug']
+            
+            return [{column[i]:row[i] for i in range(2)} for row in res]
+        
+    def get_keyword_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id,name,slug FROM iris.keyword WHERE iris.keyword.game_id = %s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['id', 'name', 'slug']
+            
+            return [{column[i]:row[i] for i in range(3)} for row in res]
+
 
 class iris_user:
     def __init__(self):

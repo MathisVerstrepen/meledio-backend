@@ -9,6 +9,7 @@ import redis
 import json
 import time
 import logging
+from timeit import default_timer as timer
 
 from app.functions.IGDB import IGDB
 from app.functions.iris import iris, iris_user
@@ -271,10 +272,11 @@ def get_user_redis(data: object) -> None:
 
 
 @ares.get("/v1/game")
-@limiter.limit("60/minute")
-def get_game_data(request: Request, gID: int, labels: list) -> dict:
+# @limiter.limit("60/minute")
+def get_game_data(request: Request, gID: int, labels: list, debug: bool = False) -> dict:
     
     fData = {}
+    debugData = {}
 
     all_labels = {
         "base" : {
@@ -353,21 +355,66 @@ def get_game_data(request: Request, gID: int, labels: list) -> dict:
 
     for label in labels:
         if (label == 'base'):
+            start = timer()
             res = iris_cli.get_base_game_data(gID)
+            end = timer()
             fData['base'] = res
+            if debug: debugData['base'] = end-start
 
         elif (label in ['artworks', 'cover', 'screenshots']):
+            start = timer()
             res = iris_cli.get_media_game_data(gID, label)
+            end = timer()
             fData[label] = res
+            if debug: debugData[label] = end-start
             
         elif (label == 'alternative_name'):
+            start = timer()
             res = iris_cli.get_alternative_name_game_data(gID)
+            end = timer()
             fData[label] = res
+            if debug: debugData[label] = end-start
             
         elif (label == 'album'):
+            start = timer()
             res = iris_cli.get_album_game_data(gID)
+            end = timer()
             fData[label] = res
+            if debug: debugData[label] = end-start
+            
+        elif (label == 'involved_companies'):
+            start = timer()
+            res = iris_cli.get_involved_companies_game_data(gID)
+            end = timer()
+            fData[label] = res
+            if debug: debugData[label] = end-start
+            
+        elif (label in ['dlcs', 'expansions', 'expanded_games', 'similar_games', 'standalone_expansions']):
+            start = timer()
+            res = iris_cli.get_extra_content_game_data(gID, label)
+            end = timer()
+            fData[label] = res
+            if debug: debugData[label] = end-start
 
-
-
-    return {"data": fData}
+        elif (label == 'genre'):
+            start = timer()
+            res = iris_cli.get_genre_game_data(gID)
+            end = timer()
+            fData[label] = res
+            if debug: debugData[label] = end-start
+            
+        elif (label == 'theme'):
+            start = timer()
+            res = iris_cli.get_theme_game_data(gID)
+            end = timer()
+            fData[label] = res
+            if debug: debugData[label] = end-start
+            
+        elif (label == 'keyword'):
+            start = timer()
+            res = iris_cli.get_keyword_game_data(gID)
+            end = timer()
+            fData[label] = res
+            if debug: debugData[label] = end-start
+            
+    return {"debug_data": debugData, "data": fData}

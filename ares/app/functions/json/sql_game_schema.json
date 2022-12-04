@@ -15,6 +15,10 @@
         "type" : "base",
         "field" : "name"
     },
+    "parent_game": {
+        "type" : "parent",
+        "field" : "parent_game"
+    },
     "rating": {
         "type" : "base",
         "field" : "rating"
