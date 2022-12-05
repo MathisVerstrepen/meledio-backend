@@ -273,148 +273,73 @@ def get_user_redis(data: object) -> None:
 
 @ares.get("/v1/game")
 # @limiter.limit("60/minute")
-def get_game_data(request: Request, gID: int, labels: list, debug: bool = False) -> dict:
+def get_game_data(request: Request, gID: int, labels: list, debug: bool = False, forceDB: bool = False) -> dict:
     
     fData = {}
     debugData = {}
 
-    all_labels = {
-        "base" : {
-            "table": "game",
-            "columns" : ["name", "slug", "complete", "category", 'collection_id', "first_release_date", "rating", "popularity", "summary"]
-        },
-        "album" : {
-            "table" : "album",
-            "columns" : [],
-        },
-        "alternative_name" : {
-            "table" : "alternative_name",
-            "columns" : [],
-        },
-        "category" : {
-            "table" : "category",
-            "columns" : [],
-        },
-        "collection" : {
-            "table" : "collection",
-            "columns" : [],
-        },
-        "involved_companies" : {
-            "table" : "involved_companies",
-            "columns" : [],
-        },
-        "dlcs" : {
-            "table" : "extra_content",
-            "columns" : [],
-        },
-        "expanded_games" : {
-            "table" : "extra_content",
-            "columns" : [],
-        },
-        "expansions" : {
-            "table" : "extra_content",
-            "columns" : [],
-        },
-        "standalone_expansions" : {
-            "table" : "extra_content",
-            "columns" : [],
-        },
-        "similar_games" : {
-            "table" : "extra_content",
-            "columns" : [],
-        },
-        "genre" : {
-            "table" : "genre",
-            "columns" : [],
-        },
-        "keyword" : {
-            "table" : "keyword",
-            "columns" : [],
-        },
-        "cover" : {
-            "table" : "media",
-            "columns" : [],
-        },
-        "artworks" : {
-            "table" : "media",
-            "columns" : [],
-        },
-        "screenshots" : {
-            "table" : "media",
-            "columns" : [],
-        },
-        "theme" : {
-            "table" : "theme",
-            "columns" : [],
-        },
-        "track" : {
-            "table" : "track",
-            "columns" : [],
-        }
-    }
-
     for label in labels:
         if (label == 'base'):
             start = timer()
-            res = iris_cli.get_base_game_data(gID)
+            res = iris_cli.get_base_game_data(gID, forceDB)
             end = timer()
             fData['base'] = res
-            if debug: debugData['base'] = end-start
+            if debug: debugData['base'] = (end-start)*1000
 
         elif (label in ['artworks', 'cover', 'screenshots']):
             start = timer()
             res = iris_cli.get_media_game_data(gID, label)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label == 'alternative_name'):
             start = timer()
             res = iris_cli.get_alternative_name_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label == 'album'):
             start = timer()
             res = iris_cli.get_album_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label == 'involved_companies'):
             start = timer()
             res = iris_cli.get_involved_companies_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label in ['dlcs', 'expansions', 'expanded_games', 'similar_games', 'standalone_expansions']):
             start = timer()
             res = iris_cli.get_extra_content_game_data(gID, label)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
 
         elif (label == 'genre'):
             start = timer()
             res = iris_cli.get_genre_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label == 'theme'):
             start = timer()
             res = iris_cli.get_theme_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
         elif (label == 'keyword'):
             start = timer()
             res = iris_cli.get_keyword_game_data(gID)
             end = timer()
             fData[label] = res
-            if debug: debugData[label] = end-start
+            if debug: debugData[label] = (end-start)*1000
             
     return {"debug_data": debugData, "data": fData}

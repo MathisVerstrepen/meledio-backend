@@ -138,6 +138,8 @@ class iris:
                         data = (datetime.fromtimestamp(field_data), gameID,)
                         curs.execute(query, data)
                         
+                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", field_data)
+                        
                     #-- Game table root column but parent game --# 
                     elif field_type == 'parent':
                         logging.debug(field_data)
@@ -303,18 +305,25 @@ class iris:
 
         self.conn.commit()
     
-    def get_base_game_data(self, gameID) -> dict:
+    def get_base_game_data(self, gameID: int, forceDB: bool) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT * FROM iris.game WHERE id=%s;")
-            data = (gameID,)
-            curs.execute(query, data)
-            res = curs.fetchone()
-            column = ['id', 'name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
-
-
-            if (res) : return {column[i]:res[i] for i in range(11)}
-            else : return {}
+            
+            inCacheComplete = self.existInCache(gameID)
+            if (inCacheComplete and inCacheComplete[0] and not forceDB):
+                rRes = self.rcli.json().get(f"g:{gameID}", "$.name", "$.slug", "$.complete", "$.parent_game", "$.category", "$.collection_id", "$.first_release_date", "$.rating", "$.popularity", "$.summary")
+                logging.debug(rRes)
+                res = {key.split('.')[1]:next(iter(value), None) for key, value in rRes.items()}
+                return res
+            else:
+                query = sql.SQL("SELECT name,slug,complete,parent_game,category,collection_id,first_release_date,rating,popularity,summary FROM iris.game WHERE id=%s;")
+                data = (gameID,)
+                curs.execute(query, data)
+                res = curs.fetchone()
+                column = ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
+                # res  = None
+                if (res) : return {column[i]:res[i] for i in range(10)}
+                else : return {}
         
     def get_media_game_data(self, gameID, media_type) -> dict:
         
