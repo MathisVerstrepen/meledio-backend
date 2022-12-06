@@ -335,6 +335,8 @@ class s1():
 
         os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         
+        # TODO CHANGE TRACKLIST DATA DESIGN IN CACHE
+        
         r_games.json().set(f"g:{gameID}", "$.album", tracklist)
         self.conn.commit()
 

@@ -13,11 +13,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ------ Load basic knowledge needed for database push of retrived data ------ #
 f = open('./app/functions/json/sql_game_schema.json')
 SQL_schema: dict = json.load(f)
+
+# ------------- Load category_id / category label correspondance ------------- #
 f = open('./app/functions/json/category.json')
 SQL_category: dict = json.load(f)
 
+# -------------------- Create database cursor with logging ------------------- #
 class LoggingCursor(psycopg2.extensions.cursor):
     def execute(self, sql, args=None):
         logger = logging.getLogger('sql_debug')
@@ -89,6 +93,10 @@ class iris:
         curs.execute(query, (id,))
         return curs.fetchone()
 
+
+    # ---------------------------------------------------------------------------- #
+    #                                 PUSH NEW GAME                                #
+    # ---------------------------------------------------------------------------- #
 
     def push_new_game(self, game_data):
         gameID = game_data[0]["id"]
@@ -305,6 +313,13 @@ class iris:
 
         self.conn.commit()
     
+    
+    # ---------------------------------------------------------------------------- #
+    #                                 GET GAME DATA                                #
+    # ---------------------------------------------------------------------------- #
+    
+    # --------------------------------- Base data -------------------------------- #
+    
     def get_base_game_data(self, gameID: int, forceDB: bool) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -312,9 +327,8 @@ class iris:
             inCacheComplete = self.existInCache(gameID)
             if (inCacheComplete and inCacheComplete[0] and not forceDB):
                 rRes = self.rcli.json().get(f"g:{gameID}", "$.name", "$.slug", "$.complete", "$.parent_game", "$.category", "$.collection_id", "$.first_release_date", "$.rating", "$.popularity", "$.summary")
-                logging.debug(rRes)
-                res = {key.split('.')[1]:next(iter(value), None) for key, value in rRes.items()}
-                return res
+                # logging.debug(rRes)
+                return {key.split('.')[1]:next(iter(value), None) for key, value in rRes.items()}
             else:
                 query = sql.SQL("SELECT name,slug,complete,parent_game,category,collection_id,first_release_date,rating,popularity,summary FROM iris.game WHERE id=%s;")
                 data = (gameID,)
@@ -325,6 +339,8 @@ class iris:
                 if (res) : return {column[i]:res[i] for i in range(10)}
                 else : return {}
         
+    # ---------------------------- All media type data --------------------------- #
+    
     def get_media_game_data(self, gameID, media_type) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -335,17 +351,8 @@ class iris:
             column = ['image_id', 'game_id', 'type', 'height', 'width']
 
             return [{column[i]:row[i] for i in range(5)} for row in res]
-        
-    def get_alternative_name_game_data(self, gameID) -> dict:
-        
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT * FROM iris.alternative_name WHERE game_id=%s;")
-            data = (gameID,)
-            curs.execute(query, data)
-            res = curs.fetchall()
-            column = ['id', 'game_id', 'name', 'comment']
-
-            return [{column[i]:row[i] for i in range(4)} for row in res]
+         
+    # ------------------------------ Main album data ----------------------------- #
         
     def get_album_game_data(self, gameID) -> dict:
         
@@ -367,6 +374,8 @@ class iris:
             
             return result
         
+    # -------------------------- Involved companies data ------------------------- #
+        
     def get_involved_companies_game_data(self, gameID) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -378,6 +387,8 @@ class iris:
             
             return [{column[i]:row[i] for i in range(9)} for row in res]
         
+    # ---------------------------- All 'extra' content --------------------------- #
+        
     def get_extra_content_game_data(self, gameID, extra_type) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -387,6 +398,8 @@ class iris:
             res = curs.fetchall()
 
             return [row[0] for row in res]
+        
+    # -------------------------------- Genre data -------------------------------- #
         
     def get_genre_game_data(self, gameID) -> dict:
         
@@ -399,6 +412,8 @@ class iris:
             
             return [{column[i]:row[i] for i in range(2)} for row in res]
         
+    # -------------------------------- Theme data -------------------------------- #
+        
     def get_theme_game_data(self, gameID) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -410,6 +425,8 @@ class iris:
             
             return [{column[i]:row[i] for i in range(2)} for row in res]
         
+    # ------------------------------- Keywords data ------------------------------ #
+        
     def get_keyword_game_data(self, gameID) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -420,7 +437,20 @@ class iris:
             column = ['id', 'name', 'slug']
             
             return [{column[i]:row[i] for i in range(3)} for row in res]
+    
+    # -------------------------- Alternative names data -------------------------- #
+        
+    def get_alternative_name_game_data(self, gameID) -> dict:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.alternative_name WHERE game_id=%s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            column = ['id', 'game_id', 'name', 'comment']
 
+            return [{column[i]:row[i] for i in range(4)} for row in res]
+       
 
 class iris_user:
     def __init__(self):
