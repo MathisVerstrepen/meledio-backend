@@ -84,10 +84,14 @@ class iris:
         except:
             self.conn = None
             
-    def existInCache(self, gameID: str):
+    def isGameCached(self, gameID: str):
         return self.rcli.json().get(f"g:{gameID}", "$.complete")
 
-    def existInDB(self, curs, table, id):
+    def isMainAlbumCached(self, gameID: str):
+        res = self.rcli.json().get(f"g:{gameID}", "$.album[0]")
+        return res if res else None
+
+    def isGameInDatabase(self, curs, table, id):
         query = sql.SQL("SELECT complete FROM iris.{table} where id=%s;").format(
                 table=sql.Identifier(table))
         curs.execute(query, (id,))
@@ -103,8 +107,8 @@ class iris:
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-            INCACHE = self.existInCache(gameID)
-            INDB = self.existInDB(curs, "game", gameID)
+            INCACHE = self.isGameCached(gameID)
+            INDB = self.isGameInDatabase(curs, "game", gameID)
             
             if INCACHE == None:
                 #-- Construct base cache data --#
@@ -151,7 +155,7 @@ class iris:
                     #-- Game table root column but parent game --# 
                     elif field_type == 'parent':
                         logging.debug(field_data)
-                        if not self.existInDB(curs, "game", field_data["id"]):
+                        if not self.isGameInDatabase(curs, "game", field_data["id"]):
                             query = sql.SQL("INSERT INTO iris.game (id, complete, name) VALUES (%s,False,%s);")
                             data = (field_data["id"], field_data["name"],)
                             curs.execute(query, data)
@@ -168,7 +172,7 @@ class iris:
                     #-- All sort of extra content of the game --# 
                     elif field_type == 'extra':
                         for extra_data in field_data:
-                            if not self.existInDB(curs, "game", extra_data["id"]):
+                            if not self.isGameInDatabase(curs, "game", extra_data["id"]):
                                 query = sql.SQL("INSERT INTO iris.game (id, complete, name) VALUES (%s,False,%s);")
                                 data = (extra_data["id"], extra_data["name"],)
                                 curs.execute(query, data)
@@ -292,8 +296,8 @@ class iris:
                 "http://triton:5110/del_media", data=json.dumps({"medias": medias_hash})
             )
             
-            inCache = self.existInCache(gameID)
-            inDB = self.existInDB(curs, "game", gameID)
+            inCache = self.isGameCached(gameID)
+            inDB = self.isGameInDatabase(curs, "game", gameID)
             
             if inCache:
                 gameName = self.rcli.json().get(f"g:{gameID}", "$.name")[0]
@@ -324,7 +328,7 @@ class iris:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             
-            inCacheComplete = self.existInCache(gameID)
+            inCacheComplete = self.isGameCached(gameID)
             if (inCacheComplete and inCacheComplete[0] and not forceDB):
                 rRes = self.rcli.json().get(f"g:{gameID}", "$.name", "$.slug", "$.complete", "$.parent_game", "$.category", "$.collection_id", "$.first_release_date", "$.rating", "$.popularity", "$.summary")
                 # logging.debug(rRes)
@@ -354,7 +358,7 @@ class iris:
          
     # ------------------------------ Main album data ----------------------------- #
         
-    def get_album_game_data(self, gameID) -> dict:
+    def get_album_game_data(self, gameID: int, forceDB: bool) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             query = sql.SQL("SELECT album.id, name, album.slug, track_id, title, track.slug, file, view_count, like_count, length FROM iris.album JOIN iris.track ON iris.album.track_id = iris.track.id WHERE iris.album.game_id = %s AND iris.album.name = 'Full Album'")
@@ -362,17 +366,17 @@ class iris:
             curs.execute(query, data)
             res = curs.fetchall()
             
-            result = {}
-            if (len(res)) :
+            if (cached_res := self.isMainAlbumCached(gameID)) and not forceDB:
+                return cached_res[0]
+            elif res:
                 column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
-                result = {
+                return {
                     'id' : res[0][0],
                     'name' : res[0][1],
                     'slug' : res[0][2],
                     'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
                 }
-            
-            return result
+            else: return {}
         
     # -------------------------- Involved companies data ------------------------- #
         

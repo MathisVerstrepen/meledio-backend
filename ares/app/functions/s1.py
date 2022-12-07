@@ -259,15 +259,12 @@ class s1():
         chapter_turtle = chapter_scrap(id)
 
         chapter_data = chapter_turtle.by_youtube_data()
-        logging.debug(chapter_data)
 
         if not chapter_data:
             chapter_data = chapter_turtle.by_video_desc()
-            logging.debug(chapter_data)
 
         if not chapter_data:
             chapter_data = chapter_turtle.by_video_comments()
-            logging.debug(chapter_data)
 
         return chapter_data
 
@@ -300,25 +297,28 @@ class s1():
 
     def file_formater(self, gameID: int, chapters: list, vid_dur:int, r_games) -> list:
         
+        r_games.json().set(f"g:{gameID}", "$.album", [])
+        
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-            game_name_slug = r_games.json().get(f"g:{gameID}", '$.slug')
+            game_name_slug = slugify(r_games.json().get(f"g:{gameID}", '$.slug')[0] + " full album")
             subprocess_list = []
             tracklist = []
             
             for i in range(len(chapters)):
                 
                 file_uuid = uuid.uuid4().hex
+                title_slug = slugify(chapters[i]['title'])
                 start = chapters[i]['timestamp']
                 end = vid_dur if i >= len(chapters)-1 else chapters[i+1]['timestamp']
 
                 query = sql.SQL("INSERT INTO iris.track (game_id, title, slug, file, view_count, like_count, length) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;")
-                data = (gameID, chapters[i]['title'], slugify(chapters[i]['title']), file_uuid, 0, 0, end-start)
+                data = (gameID, chapters[i]['title'], title_slug, file_uuid, 0, 0, end-start)
                 curs.execute(query, data)
                 track_id = curs.fetchall()[0][0]
                 
                 query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
-                data = (gameID, track_id, "Full Album", slugify(game_name_slug[0] + " full album"))
+                data = (gameID, track_id, "Full Album", game_name_slug)
                 curs.execute(query, data)
 
                 p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
@@ -327,17 +327,25 @@ class s1():
                 subprocess_list.append(p)
 
                 tracklist.append({
+                    'id': track_id,
                     'title': chapters[i]['title'],
-                    'file': file_uuid
+                    'slug' : title_slug,
+                    'file': file_uuid,
+                    'view_count' : 0,
+                    'like_count': 0,
+                    'length': end-start
                 })
 
         [p.wait() for p in subprocess_list]
 
         os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         
-        # TODO CHANGE TRACKLIST DATA DESIGN IN CACHE
+        r_games.json().arrinsert(f"g:{gameID}", "$.album", 0, {
+            "name" : "Full Album",
+            "slug" : game_name_slug,
+            "track" : tracklist
+        })
         
-        r_games.json().set(f"g:{gameID}", "$.album", tracklist)
         self.conn.commit()
 
         return tracklist

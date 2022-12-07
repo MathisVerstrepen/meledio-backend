@@ -302,7 +302,7 @@ def get_game_data(request: Request, gID: int, labels: list, debug: bool = False,
             
         elif (label == 'album'):
             start = timer()
-            res = iris_cli.get_album_game_data(gID)
+            res = iris_cli.get_album_game_data(gID, forceDB)
             end = timer()
             fData[label] = res
             if debug: debugData[label] = (end-start)*1000
