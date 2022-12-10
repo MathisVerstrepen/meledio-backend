@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Path
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -272,8 +272,8 @@ def get_user_redis(data: object) -> None:
 
 
 @ares.get("/v1/game")
-# @limiter.limit("60/minute")
-def get_game_data(request: Request, gID: int, labels: list, debug: bool = False, forceDB: bool = False) -> dict:
+@limiter.limit("60/minute")
+async def get_game_data(request: Request, gID: int, labels: list = ['base'], debug: bool = False, forceDB: bool = False) -> dict:
     
     fData = {}
     debugData = {}
@@ -343,3 +343,14 @@ def get_game_data(request: Request, gID: int, labels: list, debug: bool = False,
             if debug: debugData[label] = (end-start)*1000
             
     return {"debug_data": debugData, "data": fData}
+
+@ares.get("/v1/game/random/{number}")
+@limiter.limit("60/minute")
+async def get_random_game(request: Request, labels: list = ['base'], number: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
+    
+    data = []
+    randID: list = iris_cli.getRandomCompleteGameIDs(number)
+    for gameID in randID:
+        data.append(await get_game_data(request, gameID, labels, debug, forceDB))
+    
+    return {"data": data}

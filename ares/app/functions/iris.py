@@ -97,6 +97,11 @@ class iris:
         curs.execute(query, (id,))
         return curs.fetchone()
 
+    def getRandomCompleteGameIDs(self, number: int):
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id FROM iris.game WHERE complete = true ORDER BY random() LIMIT %s;")
+            curs.execute(query, (number,))
+            return curs.fetchall()
 
     # ---------------------------------------------------------------------------- #
     #                                 PUSH NEW GAME                                #
@@ -255,14 +260,22 @@ class iris:
                             
                             thread = threading.Thread(target=image_downloader, args=(self.IGDB_client, field, media))
                             thread.start()
+                            
+                        mediaFieldExist = self.rcli.json().get(f"g:{gameID}", f"$.media")
+                        if not mediaFieldExist:
+                            self.rcli.json().set(f"g:{gameID}", f"$.media", {
+                                "artworks" : [],
+                                "screenshots": [],
+                                "cover": None
+                            })
                         
                         if isinstance(field_data, list):
                             for media in field_data: 
                                 insert_media(media)
-                            self.rcli.json().set(f"g:{gameID}", f"$.{field}", [media.get("image_id") for media in field_data])
+                                self.rcli.json().arrappend(f"g:{gameID}", f"$.media.{field}", media.get("image_id"))
                         else:
                             insert_media(field_data)
-                            self.rcli.json().set(f"g:{gameID}", f"$.{field}", field_data.get("image_id"))
+                            self.rcli.json().set(f"g:{gameID}", f"$.media.{field}", field_data.get("image_id"))
                             
                     #-- All other tables --#
                     elif field_type == 'normal':
