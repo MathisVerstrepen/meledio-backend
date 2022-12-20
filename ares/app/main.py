@@ -273,7 +273,7 @@ def get_user_redis(data: object) -> None:
 
 @ares.get("/v1/game")
 @limiter.limit("60/minute")
-async def get_game_data(request: Request, gID: int, labels: list = ['base'], debug: bool = False, forceDB: bool = False) -> dict:
+async def get_game_data(request: Request, gID: int, labels: list[str] = Query(default=['base']), debug: bool = False, forceDB: bool = False) -> dict:
     
     fData = {}
     debugData = {}
@@ -342,16 +342,28 @@ async def get_game_data(request: Request, gID: int, labels: list = ['base'], deb
             fData[label] = res
             if debug: debugData[label] = (end-start)*1000
             
-    return {"debug_data": debugData, "data": fData}
+    return {"debug_data": debugData, "gameID": gID, "data": fData}
 
-@ares.get("/v1/game/random/{number}")
+@ares.get("/v1/game/random/{limit}")
 # @limiter.limit("60/minute")
-async def get_random_game(request: Request, labels: list[str] = Query(default=['base']), number: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
+async def get_random_games(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
     logging.debug(labels)
     data = []
-    randID: list = iris_cli.getRandomCompleteGameIDs(number)
+    randID: list = iris_cli.getRandomCompleteGameIDs(limit)
     for gameID in randID:
-        data.append(await get_game_data(request, gameID, labels, debug, forceDB))
+        data.append(await get_game_data(request, gameID[0], labels, debug, forceDB))
+    
+    return {"data": data}
+
+@ares.get("/v1/game/rating/{limit}")
+# @limiter.limit("60/minute")
+async def get_top_rated_games(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
+    
+    logging.debug(labels)
+    data = []
+    topRateIDs: list = iris_cli.getTopRatedGameIDs(limit)
+    for gameID in topRateIDs:
+        data.append(await get_game_data(request, gameID[0], labels, debug, forceDB))
     
     return {"data": data}

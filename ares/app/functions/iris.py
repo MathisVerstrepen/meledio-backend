@@ -102,6 +102,12 @@ class iris:
             query = sql.SQL("SELECT id FROM iris.game WHERE complete = true ORDER BY random() LIMIT %s;")
             curs.execute(query, (number,))
             return curs.fetchall()
+        
+    def getTopRatedGameIDs(self, number: int):
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id FROM iris.game WHERE complete = true AND rating IS NOT NULL ORDER BY rating desc LIMIT %s;")
+            curs.execute(query, (number,))
+            return curs.fetchall()
 
     # ---------------------------------------------------------------------------- #
     #                                 PUSH NEW GAME                                #
