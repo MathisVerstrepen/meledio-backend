@@ -367,3 +367,17 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
         data.append(await get_game_data(request, gameID[0], labels, debug, forceDB))
     
     return {"data": data}
+
+@ares.get("/v1/game/collection/top/{limit}")
+# @limiter.limit("60/minute")
+async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
+    
+    logging.debug(labels)
+    data = {}
+    topRateIDs: list = iris_cli.getTopRatedCollectionIDs(limit)
+    
+    for gameID, collectionID, collectionName in topRateIDs:
+        data.setdefault(collectionID, {})['collectionName'] = collectionName
+        data[collectionID].setdefault('gameData', []).append(await get_game_data(request, gameID, labels, debug, forceDB))
+
+    return {"data": data}

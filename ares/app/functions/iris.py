@@ -108,6 +108,22 @@ class iris:
             query = sql.SQL("SELECT id FROM iris.game WHERE complete = true AND rating IS NOT NULL ORDER BY rating desc LIMIT %s;")
             curs.execute(query, (number,))
             return curs.fetchall()
+        
+    def getTopRatedCollectionIDs(self, number: int):
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""SELECT iris.game.id, iris.game.collection_id, a.name
+                                FROM iris.game
+                                JOIN (SELECT collection.id, collection.name, AVG(rating) AS avgRating
+                                        FROM iris.collection
+                                        JOIN iris.game g ON collection.id = g.collection_id
+                                        WHERE complete
+                                        GROUP BY collection.id
+                                        HAVING AVG(rating) IS NOT NULL
+                                        AND COUNT(*) > 1
+                                        LIMIT %s) a ON a.id = game.collection_id
+                                ORDER BY a.avgRating DESC;""")
+            curs.execute(query, (number,))
+            return curs.fetchall()
 
     # ---------------------------------------------------------------------------- #
     #                                 PUSH NEW GAME                                #
