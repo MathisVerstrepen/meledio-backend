@@ -7,6 +7,7 @@ WORKDIR /triton
 COPY ./docker/conf/triton-requirements.txt /triton/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade -r /triton/requirements.txt
+RUN apt-get -y update && apt-get -y install ffmpeg
 
 COPY ./triton /triton
 
