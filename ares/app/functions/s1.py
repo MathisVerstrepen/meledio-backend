@@ -14,6 +14,8 @@ from psycopg2 import sql
 from slugify import slugify
 import logging
 import re
+import shutil
+
 
 
 def extract_video_info(data) -> str:
@@ -271,11 +273,8 @@ class s1():
     def downloader(self, vidID: str, gameID: int) -> list:
         
         dir = f'/bacchus/audio/{gameID}'
-        try:
-            os.mkdir(dir)
-        except:
-            for f in os.listdir(dir):
-                os.remove(os.path.join(dir, f))
+        shutil.rmtree(dir)
+        os.mkdir(dir)
             
         
         URL = f'http://www.youtube.com/watch?v={vidID}'

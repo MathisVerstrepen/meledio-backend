@@ -4,7 +4,10 @@ from pydub import AudioSegment
 from os.path import exists
 from io import BytesIO
 import glob
+import logging
 import os
+import pathlib
+import redis
 
 class ConnectionManager:
     def __init__(self):
@@ -25,8 +28,18 @@ class ConnectionManager:
             await connection.send_text(message)
 manager = ConnectionManager()
 
+from dotenv import load_dotenv
+load_dotenv()
+r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
 
+logging.basicConfig(
+    filename="app/logs/triton.log",
+    encoding="utf-8",
+    level=logging.DEBUG,
+    format="%(asctime)s -- %(levelname)s -- %(message)s",
+)
 
+ 
 triton = FastAPI()
 validation_cat = {
     'artwork': 'a',
@@ -74,6 +87,37 @@ async def delete_media(body: dict = Body(...)) -> dict:
 
     return {'file_removed': nfile}
 
+@triton.get("/media/audio/format")
+async def format_audio(gameID: int, audioID: str, audioIndex: int):
+    audio = AudioSegment.from_file(f"/bacchus/audio/1942/{audioID}.m4a")
+    audioLength = len(audio)
+    audioMetadata = []
+    
+    dir = f"/bacchus/audio/1942/{audioID}"
+    if (not os.path.isdir(dir)) : os.makedirs(dir)
+    files = glob.glob(f"/bacchus/audio/1942/{audioID}/*")
+    for f in files:
+        os.remove(f)
+    
+    currentTimecode = 0
+    while currentTimecode < audioLength - 10*1000:
+        cutAudio = audio[currentTimecode:currentTimecode + 10*1000]
+        
+        wavIO=BytesIO()
+        cutAudio.export(wavIO, format="mp3")
+        pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+        
+        audioMetadata.append(currentTimecode)
+        currentTimecode += 10*1000
+            
+    cutAudio = audio[currentTimecode:audioLength]
+    wavIO=BytesIO()
+    cutAudio.export(wavIO, format="mp3")
+    pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+    audioMetadata.append(currentTimecode) 
+    
+    r_games.json().set(f"g:{gameID}", f"$.album[0].track[{audioIndex}].metadata", audioMetadata)
+    return 'ok'
 
 
 @triton.get("/audio/info/{audioID}")
@@ -85,14 +129,10 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            audio = AudioSegment.from_file(f"/bacchus/audio/1942/{data}.m4a")
-            ten_seconds = 10 * 1000
-            first_10_seconds = audio[:ten_seconds]
-
-            wavIO=BytesIO()
-            audio.export(wavIO, format="mp3")
-            await manager.send_personal_message(wavIO, websocket)
+            audioID = await websocket.receive_text()
+            audio_bytes = pathlib.Path(f"/bacchus/audio/1942/{audioID}/0").read_bytes()
+            
+            await manager.send_personal_message(audio_bytes, websocket)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
