@@ -6,15 +6,20 @@ import yt_dlp
 import os
 import subprocess
 from datetime import timedelta
+from pydub import AudioSegment
 import uuid
 from multiprocessing import Pool
+from threading import Thread
 import psycopg2
 import psycopg2.extensions
 from psycopg2 import sql
 from slugify import slugify
 import logging
 import re
+import glob
 import shutil
+from io import BytesIO
+import pathlib
 
 
 
@@ -120,7 +125,6 @@ class chapter_scrap():
         try:
             desc = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
                     ['contents'][1]['videoSecondaryInfoRenderer']['description']['runs'])
-            logging.debug(desc)
         except Exception:
             chapter_data = None
         else:
@@ -160,7 +164,6 @@ class chapter_scrap():
         return chapter_data
 
     def format_line(self, lline: str) -> str:
-        logging.debug(lline)
         for lpart in lline:
             if lpart:
                 lpart = lpart.split('\n')[0].strip() if (lpart.split('\n')[0]) else lpart.split('\n')[1].strip()
@@ -293,6 +296,38 @@ class s1():
             ydl.download([URL])
 
         return vid_dur
+    
+    def format_audio(gameID: int, audioID: str, audioIndex: int, r_games):
+        audio = AudioSegment.from_file(f"/bacchus/audio/1942/{audioID}.m4a")
+        audioLength = len(audio)
+        audioMetadata = []
+        
+        dir = f"/bacchus/audio/1942/{audioID}"
+        if (not os.path.isdir(dir)) : os.makedirs(dir)
+        files = glob.glob(f"/bacchus/audio/1942/{audioID}/*")
+        for f in files:
+            os.remove(f)
+        
+        currentTimecode = 0
+        while currentTimecode < audioLength - 10*1000:
+            cutAudio = audio[currentTimecode:currentTimecode + 10*1000]
+            
+            wavIO=BytesIO()
+            cutAudio.export(wavIO, format="mp3")
+            pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+            
+            audioMetadata.append(currentTimecode)
+            currentTimecode += 10*1000
+                
+        cutAudio = audio[currentTimecode:audioLength]
+        wavIO=BytesIO()
+        cutAudio.export(wavIO, format="mp3")
+        pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+        audioMetadata.append(currentTimecode) 
+        
+        r_games.json().set(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta", audioMetadata)
+        
+        logging.debug(f'Format track {audioID}')
 
     def file_formater(self, gameID: int, chapters: list, vid_dur:int, r_games) -> list:
         
@@ -336,14 +371,17 @@ class s1():
                 })
 
         [p.wait() for p in subprocess_list]
-
-        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         
         r_games.json().arrinsert(f"g:{gameID}", "$.album", 0, {
             "name" : "Full Album",
             "slug" : game_name_slug,
             "track" : tracklist
         })
+        
+        for index, track in enumerate(tracklist) :
+            Thread(target=s1.format_audio, args=(gameID, track['file'], index, r_games, )).start()
+
+        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
         
         self.conn.commit()
 

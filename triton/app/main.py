@@ -4,10 +4,12 @@ from pydub import AudioSegment
 from os.path import exists
 from io import BytesIO
 import glob
+import json
 import logging
 import os
 import pathlib
 import redis
+import base64
 
 class ConnectionManager:
     def __init__(self):
@@ -87,38 +89,6 @@ async def delete_media(body: dict = Body(...)) -> dict:
 
     return {'file_removed': nfile}
 
-@triton.get("/media/audio/format")
-async def format_audio(gameID: int, audioID: str, audioIndex: int):
-    audio = AudioSegment.from_file(f"/bacchus/audio/1942/{audioID}.m4a")
-    audioLength = len(audio)
-    audioMetadata = []
-    
-    dir = f"/bacchus/audio/1942/{audioID}"
-    if (not os.path.isdir(dir)) : os.makedirs(dir)
-    files = glob.glob(f"/bacchus/audio/1942/{audioID}/*")
-    for f in files:
-        os.remove(f)
-    
-    currentTimecode = 0
-    while currentTimecode < audioLength - 10*1000:
-        cutAudio = audio[currentTimecode:currentTimecode + 10*1000]
-        
-        wavIO=BytesIO()
-        cutAudio.export(wavIO, format="mp3")
-        pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
-        
-        audioMetadata.append(currentTimecode)
-        currentTimecode += 10*1000
-            
-    cutAudio = audio[currentTimecode:audioLength]
-    wavIO=BytesIO()
-    cutAudio.export(wavIO, format="mp3")
-    pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
-    audioMetadata.append(currentTimecode) 
-    
-    r_games.json().set(f"g:{gameID}", f"$.album[0].track[{audioIndex}].metadata", audioMetadata)
-    return 'ok'
-
 
 @triton.get("/audio/info/{audioID}")
 async def get_audio_stream_init_info(audioID: str = Path(default=..., title="media category")) :
@@ -129,10 +99,42 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            audioID = await websocket.receive_text()
-            audio_bytes = pathlib.Path(f"/bacchus/audio/1942/{audioID}/0").read_bytes()
+            message = await websocket.receive_text()
+            messData = json.loads(message)
+            logging.debug(message)
+            gameID = messData['gid']
+            audioIndex = messData['audIdx']
+            audioID = messData['id']
             
-            await manager.send_personal_message(audio_bytes, websocket)
+            if (messData['chunk'] == 0):
+                trackChunksMetadata = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta")[0]
+                logging.debug(trackChunksMetadata)
+                trackSessionData = {
+                    "base" : message,
+                    "chunk" : -1,
+                    "chunkMeta" : trackChunksMetadata
+                }
+                
+                await manager.send_personal_message(json.dumps(trackSessionData), websocket)
+                
+                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/0").read_bytes()
+                await manager.send_personal_message(audio_bytes, websocket)
+                
+            else :
+                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{messData['chunk']}").read_bytes()
+                # b = str(messData['chunk']).encode('utf-8')
+                # logging.debug(audio_bytes)
+                # logging.debug(b)
+                # logging.debug(b+audio_bytes)
+                # sendData = {
+                #     "chunk" : messData['chunk'],
+                #     'bytes' : str(audio_bytes, 'latin-1')
+                # }
+                await manager.send_personal_message(audio_bytes, websocket)
+            
+            # audio_bytes = pathlib.Path(f"/bacchus/audio/1942/{audioID}/0").read_bytes()
+            
+                # await manager.send_personal_message(audio_bytes, websocket)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
