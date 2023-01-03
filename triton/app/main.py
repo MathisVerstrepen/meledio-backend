@@ -108,11 +108,13 @@ async def websocket_endpoint(websocket: WebSocket):
             
             if (messData['chunk'] == 0):
                 trackChunksMetadata = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta")[0]
-                logging.debug(trackChunksMetadata)
+                audioLength = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].length")[0]
+
                 trackSessionData = {
                     "base" : message,
                     "chunk" : -1,
-                    "chunkMeta" : trackChunksMetadata
+                    "chunkMeta" : trackChunksMetadata,
+                    "audioLength" : audioLength
                 }
                 
                 await manager.send_personal_message(json.dumps(trackSessionData), websocket)
