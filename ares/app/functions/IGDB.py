@@ -3,6 +3,7 @@ from rich import print
 import requests
 import json
 import os
+import logging
 
 
 def GET_IGDB_TOKEN(r):
@@ -36,6 +37,7 @@ def REFRESH_TOKEN():
 class IGDB():
     def __init__(self, r):
         self.TOKEN = GET_IGDB_TOKEN(r)
+        # logging.debug(self.TOKEN)
         self.req_header = {
             'Accept': 'application/json',
             'Client-ID': os.getenv('IGDB_ID'),
@@ -45,9 +47,13 @@ class IGDB():
     def matching_games(self, input):
         clean_input = input.lower()
         IGDB_res = requests.post('https://api.igdb.com/v4/games',
-                                 headers=self.req_header,
-                                 data='fields name; search "{0}";'.format(clean_input))
+                                headers=self.req_header,
+                                data='fields name; search "{0}";'.format(clean_input))
         parsed_IGDB_res = json.loads(IGDB_res.text)
+        
+        logging.debug(parsed_IGDB_res)
+        logging.debug(os.getenv('IGDB_ID'))
+
 
         matching_game = [{
             'id': game['id'],
@@ -62,8 +68,8 @@ class IGDB():
 
     def new_game(self, gameID):
         IGDB_res = requests.post('https://api.igdb.com/v4/games',
-                                 headers=self.req_header,
-                                 data="""fields name, 
+                                headers=self.req_header,
+                                data="""fields name, 
                                         alternative_names.name, alternative_names.comment, 
                                         artworks.alpha_channel, artworks.animated, artworks.height, artworks.width, artworks.image_id, 
                                         category, 

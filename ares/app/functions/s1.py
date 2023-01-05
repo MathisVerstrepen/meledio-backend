@@ -83,12 +83,12 @@ class chapter_scrap():
                 fullRowElt.append(text[index].get('text').split('\n')[-1])
                 
                 for tmpIndex in range(index + 1, nextIndex):
-                    logging.debug(text[tmpIndex].get('text'))
+                    # logging.debug(text[tmpIndex].get('text'))
                     fullRowElt.append(text[tmpIndex].get('text'))
                     
                 if nextIndex < ntext : fullRowElt.append(text[nextIndex].get('text').split('\n')[0])
                 
-                logging.debug(fullRowElt)
+                # logging.debug(fullRowElt)
                 
                 # if nextIndex < ntext : start_next_string = text[nextIndex].get('text').split('\n')[-1]
                 
@@ -276,7 +276,9 @@ class s1():
     def downloader(self, vidID: str, gameID: int) -> list:
         
         dir = f'/bacchus/audio/{gameID}'
-        shutil.rmtree(dir)
+        try :
+            shutil.rmtree(dir)
+        except : pass
         os.mkdir(dir)
             
         
@@ -298,13 +300,13 @@ class s1():
         return vid_dur
     
     def format_audio(gameID: int, audioID: str, audioIndex: int, r_games):
-        audio = AudioSegment.from_file(f"/bacchus/audio/1942/{audioID}.m4a")
+        audio = AudioSegment.from_file(f"/bacchus/audio/{gameID}/{audioID}.m4a")
         audioLength = len(audio)
         audioMetadata = []
         
-        dir = f"/bacchus/audio/1942/{audioID}"
+        dir = f"/bacchus/audio/{gameID}/{audioID}"
         if (not os.path.isdir(dir)) : os.makedirs(dir)
-        files = glob.glob(f"/bacchus/audio/1942/{audioID}/*")
+        files = glob.glob(f"/bacchus/audio/{gameID}/{audioID}/*")
         for f in files:
             os.remove(f)
         
@@ -314,7 +316,7 @@ class s1():
             
             wavIO=BytesIO()
             cutAudio.export(wavIO, format="mp3")
-            pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+            pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
             
             audioMetadata.append(currentTimecode)
             currentTimecode += 10*1000
@@ -322,7 +324,7 @@ class s1():
         cutAudio = audio[currentTimecode:audioLength]
         wavIO=BytesIO()
         cutAudio.export(wavIO, format="mp3")
-        pathlib.Path(f"/bacchus/audio/1942/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
+        pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
         audioMetadata.append(currentTimecode) 
         
         r_games.json().set(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta", audioMetadata)
