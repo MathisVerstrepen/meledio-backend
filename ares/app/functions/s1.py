@@ -312,7 +312,8 @@ class s1():
         
         currentTimecode = 0
         while currentTimecode < audioLength - 10*1000:
-            cutAudio = audio[currentTimecode:currentTimecode + 10*1000]
+            currentTimecodeDelay = currentTimecode if currentTimecode == 0 else currentTimecode - 100
+            cutAudio = audio[currentTimecodeDelay:currentTimecode + (10*1000 + 100)]
             
             wavIO=BytesIO()
             cutAudio.export(wavIO, format="mp3")
@@ -321,7 +322,7 @@ class s1():
             audioMetadata.append(currentTimecode)
             currentTimecode += 10*1000
                 
-        cutAudio = audio[currentTimecode:audioLength]
+        cutAudio = audio[currentTimecode - 100:audioLength]
         wavIO=BytesIO()
         cutAudio.export(wavIO, format="mp3")
         pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
