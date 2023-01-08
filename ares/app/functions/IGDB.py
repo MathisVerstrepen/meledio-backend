@@ -118,10 +118,15 @@ class IGDB():
 
         # return final_data
 
+        logging.debug(
+            ("fields description, logo.image_id, name, slug; where id=({companies});").format(
+                                    companies=','.join([str(company['company']) for company in field_data]))
+        )
         res = requests.post('https://api.igdb.com/v4/companies',
                                 headers=self.req_header,
-                                data=("fields description, logo.image_id, name, slug; where id=({companies});").format(
-                                    companies=','.join([str(company['company']) for company in field_data])
+                                data=("fields description, logo.image_id, name, slug; where id=({companies}); limit {limit};").format(
+                                    companies=','.join([str(company['company']) for company in field_data]),
+                                    limit = len(field_data) + 1
                                 ))
     
         return json.loads(res.text)

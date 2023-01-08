@@ -234,7 +234,9 @@ class iris:
                     #-- Company and involved companies tables --#    
                     elif field_type == 'company':
                         
+                        logging.debug(field_data)
                         company_data: list = self.IGDB_client.companies(field_data)
+                        logging.debug(company_data)
                         logging.debug(field)
                         for company in company_data:
                             query = sql.SQL("INSERT INTO iris.{table} (id, name, slug, description, logo_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING;").format(
