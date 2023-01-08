@@ -370,7 +370,7 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
 
 @ares.get("/v1/game/collection/top/{limit}")
 # @limiter.limit("60/minute")
-async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
+async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
     logging.debug(labels)
     data = {}
@@ -379,5 +379,19 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
     for gameID, collectionID, collectionName in topRateIDs:
         data.setdefault(collectionID, {})['collectionName'] = collectionName
         data[collectionID].setdefault('gameData', []).append(await get_game_data(request, gameID, labels, debug, forceDB))
+
+    return {"data": data}
+
+@ares.get("/v1/game/collection/{collectionID}")
+# @limiter.limit("60/minute")
+async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']), collectionID: int = Path(0, title="Collection ID"), debug: bool = False, forceDB: bool = False) -> dict:
+    
+    logging.debug(labels)
+    collectionData: list = iris_cli.getCollection(collectionID)
+    
+    data = {}
+    logging.debug(collectionData)
+    for game in collectionData:
+        data[game[0]] = await get_game_data(request, game[0], labels, debug, forceDB)
 
     return {"data": data}

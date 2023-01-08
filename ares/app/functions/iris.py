@@ -124,6 +124,16 @@ class iris:
                                 ORDER BY a.avgRating DESC;""")
             curs.execute(query, (number,))
             return curs.fetchall()
+        
+    def getCollection(self, collectionID: int):
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""SELECT iris.game.id
+                                FROM iris.game
+                                WHERE collection_id = %s
+                                ORDER BY first_release_date DESC;""")
+            curs.execute(query, (collectionID,))
+            
+            return curs.fetchall()
 
     # ---------------------------------------------------------------------------- #
     #                                 PUSH NEW GAME                                #
