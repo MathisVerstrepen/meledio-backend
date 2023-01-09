@@ -125,7 +125,16 @@ class iris:
             curs.execute(query, (number,))
             return curs.fetchall()
         
-    def getCollection(self, collectionID: int):
+    def getCollectionData(self, collectionID: int):
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""SELECT name, slug
+                                FROM iris.collection
+                                WHERE collection.id = %s;""")
+            curs.execute(query, (collectionID,))
+            
+            return curs.fetchone()
+        
+    def getGameIDofCollection(self, collectionID: int):
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             query = sql.SQL("""SELECT iris.game.id
                                 FROM iris.game

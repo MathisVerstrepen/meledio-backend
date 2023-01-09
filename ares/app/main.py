@@ -387,11 +387,18 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
 async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']), collectionID: int = Path(0, title="Collection ID"), debug: bool = False, forceDB: bool = False) -> dict:
     
     logging.debug(labels)
-    collectionData: list = iris_cli.getCollection(collectionID)
+    collectionData: list = iris_cli.getCollectionData(collectionID)
+    collectionGameID: list = iris_cli.getGameIDofCollection(collectionID)
     
-    data = {}
-    logging.debug(collectionData)
-    for game in collectionData:
-        data[game[0]] = await get_game_data(request, game[0], labels, debug, forceDB)
+    data = {
+        "collection" : {
+            "name": collectionData[0],
+            "slug": collectionData[1]
+        },
+        "games" : {}
+    }
+    logging.debug(data)
+    for game in collectionGameID:
+        data["games"][game[0]] = await get_game_data(request, game[0], labels, debug, forceDB)
 
     return {"data": data}
