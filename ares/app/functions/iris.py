@@ -143,6 +143,17 @@ class iris:
             curs.execute(query, (collectionID,))
             
             return curs.fetchall()
+        
+    def searchGameByName(self, searchText : str) :
+        res  = self.rcli.ft("gameIdx").search(f"@name:({searchText}*)")
+        returnVal = [
+            {
+                "gameData" : json.loads(row.json),
+                "gameID" : row.id.split(':')[1],
+            } for row in res.docs
+        ]
+        logging.debug(returnVal)
+        return returnVal
 
     # ---------------------------------------------------------------------------- #
     #                                 PUSH NEW GAME                                #
