@@ -8,6 +8,8 @@ import logging
 import json
 import requests
 from datetime import datetime
+import redis
+import redis.commands.search.aggregation as aggregations
 
 from dotenv import load_dotenv
 
@@ -145,14 +147,19 @@ class iris:
             return curs.fetchall()
         
     def searchGameByName(self, searchText : str) :
-        res  = self.rcli.ft("gameIdx").search(f"@name:({searchText}*)")
-        returnVal = [
-            {
-                "gameData" : json.loads(row.json),
-                "gameID" : row.id.split(':')[1],
-            } for row in res.docs
-        ]
-        logging.debug(returnVal)
+        req = aggregations.AggregateRequest("*").load("@name", "@__key").filter(f"contains(@name, '{searchText}')")
+        res  = self.rcli.ft("gameIdx").aggregate(req)
+        returnVal = []
+        logging.debug(res.rows)
+        if not isinstance(res.rows[0][0], redis.exceptions.ResponseError):
+            resrows = res.rows[0:10 if len(res.rows) > 10 else -1]
+            returnVal = [
+                {
+                    "gameName" :el[1].decode("utf-8"),
+                    "gameID" : el[3].decode("utf-8").split(':')[1],
+                } for el in [row for row in resrows]
+            ]       
+
         return returnVal
 
     # ---------------------------------------------------------------------------- #

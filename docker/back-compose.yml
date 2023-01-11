@@ -15,7 +15,12 @@ services:
     volumes:
       - ./volumes/db/data:/var/lib/postgresql/data
       - ./conf/db:/docker-entrypoint-initdb.d
-
+  redis-overcommit:
+    build: https://github.com/bkuhl/redis-overcommit-on-host.git
+    restart: 'no'
+    privileged: true
+    volumes:
+      - /proc/sys/vm:/mnt/vm
   atlas_redis:
     container_name: atlas
     image: redis/redis-stack:latest
@@ -26,7 +31,8 @@ services:
       - ./volumes/redis/data:/data
     ports:
       - ${ATLAS_PORT}:6379
-
+    depends_on:
+      - redis-overcommit
   ares_api:
     container_name: ares
     image: dune_ares:latest
