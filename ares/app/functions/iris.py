@@ -148,19 +148,19 @@ class iris:
         
     def searchGameByName(self, searchText : str) :
         req = f"({searchText})|({searchText.strip()}*)|({searchText.strip()})"
-        # try :
-        res = self.rcli.ft("gameIdx").search(req)
         returnVal = []
-        for row in res.docs:
-            jsonrow = json.loads(row.json)
-            logging.debug(jsonrow)
-            returnVal.append({
-                "name" : jsonrow['name'],
-                "cover" : jsonrow['media']['cover'] if jsonrow.get('media') else None,
-                "id" : row.id.split(':')[1],
-            })
-        # except:
-        #     returnVal = []
+        try :
+            res = self.rcli.ft("gameIdx").search(req)
+            for row in res.docs:
+                jsonrow = json.loads(row.json)
+                logging.debug(jsonrow)
+                returnVal.append({
+                    "name" : jsonrow['name'],
+                    "cover" : jsonrow['media']['cover'] if jsonrow.get('media') else None,
+                    "id" : row.id.split(':')[1],
+                })
+        except:
+            pass
 
         return returnVal
 
