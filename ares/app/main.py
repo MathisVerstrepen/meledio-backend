@@ -406,10 +406,7 @@ async def get_collection_by_id(request: Request, labels: list[str] = Query(defau
 @ares.get("/v1/game/search/{searchText}")
 # @limiter.limit("60/minute")
 async def get_collection_by_id(request: Request, searchText: str = Path(0, title="Search game text"), debug: bool = False) -> dict:
-    logging.debug(searchText)
     
     searchResults = iris_cli.searchGameByName(searchText)
     
-    return {
-        "data": searchResults
-    }
+    return {"data": searchResults}

@@ -147,18 +147,17 @@ class iris:
             return curs.fetchall()
         
     def searchGameByName(self, searchText : str) :
-        req = aggregations.AggregateRequest("*").load("@name", "@__key").filter(f"contains(@name, '{searchText}')")
-        res  = self.rcli.ft("gameIdx").aggregate(req)
-        returnVal = []
-        logging.debug(res.rows)
-        if not isinstance(res.rows[0][0], redis.exceptions.ResponseError):
-            resrows = res.rows[0:10 if len(res.rows) > 10 else -1]
+        req = f"({searchText})|({searchText.strip()}*)|({searchText.strip()})"
+        try :
+            res = self.rcli.ft("gameIdx").search(req)
             returnVal = [
                 {
-                    "gameName" :el[1].decode("utf-8"),
-                    "gameID" : el[3].decode("utf-8").split(':')[1],
-                } for el in [row for row in resrows]
-            ]       
+                    "gameData" : json.loads(row.json),
+                    "gameID" : row.id.split(':')[1],
+                } for row in res.docs
+            ]
+        except:
+            returnVal = []
 
         return returnVal
 
