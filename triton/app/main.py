@@ -1,15 +1,15 @@
 from fastapi import Body, FastAPI, Path, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from pydub import AudioSegment
 from os.path import exists
-from io import BytesIO
 import glob
 import json
 import logging
 import os
 import pathlib
 import redis
-import base64
+from ddtrace.contrib.asgi import TraceMiddleware
+
+
 
 class ConnectionManager:
     def __init__(self):
@@ -43,6 +43,9 @@ logging.basicConfig(
 
  
 triton = FastAPI()
+triton.add_middleware(TraceMiddleware)
+
+
 validation_cat = {
     'artwork': 'a',
     'screenshot': 's',

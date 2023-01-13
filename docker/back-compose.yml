@@ -15,12 +15,14 @@ services:
     volumes:
       - ./volumes/db/data:/var/lib/postgresql/data
       - ./conf/db:/docker-entrypoint-initdb.d
+
   redis-overcommit:
     build: https://github.com/bkuhl/redis-overcommit-on-host.git
     restart: 'no'
     privileged: true
     volumes:
       - /proc/sys/vm:/mnt/vm
+
   atlas_redis:
     container_name: atlas
     image: redis/redis-stack:latest
@@ -33,6 +35,7 @@ services:
       - ${ATLAS_PORT}:6379
     depends_on:
       - redis-overcommit
+
   ares_api:
     container_name: ares
     image: dune_ares:latest
@@ -69,8 +72,15 @@ services:
       - type: bind
         source: ../bacchus
         target: /bacchus
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
     ports:
       - ${TRITON_PORT}:5110
+      - 127.0.0.1:8127:8126/tcp
+    environment:
+      - DD_API_KEY=a387ee3a1f2f81a4dd808d750621c5db
+      - DD_SERVICE=Triton-L1
+      - DD_TRACE_STARTUP_LOGS=true
     depends_on:
       - iris_db
       - atlas_redis
