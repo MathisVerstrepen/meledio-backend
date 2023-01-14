@@ -1,6 +1,6 @@
 # docker build -t dune_ares:latest -f ares.dockerfile ../
 
-FROM python:3.10
+# FROM python:3.10
 
 # # Adding trusting keys to apt for repositories
 # RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
@@ -9,7 +9,7 @@ FROM python:3.10
 # RUN sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
 
 # # Updating apt to see and install Google Chrome
-RUN apt-get -y update
+# RUN apt-get -y update
 
 # # Magic happens
 # RUN apt-get install -y google-chrome-stable
@@ -31,14 +31,25 @@ RUN apt-get -y update
 # # Set display port as an environment variable
 # ENV DISPLAY=:99
 
-RUN apt-get install -y ffmpeg
+# RUN apt-get install -y ffmpeg
+
+# WORKDIR /ares
+
+# COPY ./docker/conf/ares-requirements.txt /ares/requirements.txt
+
+# RUN pip install --no-cache-dir --upgrade -r /ares/requirements.txt
+
+# COPY ./ares /ares
+
+FROM python:3.10
 
 WORKDIR /ares
 
-COPY ./docker/conf/ares-requirements.txt /ares/requirements.txt
+RUN apt-get -y update && apt-get -y install ffmpeg
 
+COPY ./docker/conf/ares-requirements.txt /ares/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /ares/requirements.txt
 
 COPY ./ares /ares
 
-CMD ["uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload"]
+CMD ["ddtrace-run", "uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload"]

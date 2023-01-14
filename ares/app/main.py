@@ -45,14 +45,14 @@ ares.add_middleware(
 logging.basicConfig(
     filename="app/logs/ares.log",
     encoding="utf-8",
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s -- %(levelname)s -- %(message)s",
 )
 
 
 def auth(token: str) -> None:
     if token != os.getenv("ARES_TOKEN"):
-        logging.debug("%s fail logging", token)
+        logging.info("%s fail logging", token)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -97,7 +97,7 @@ def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> d
 
     auth(token)
 
-    logging.debug("Searching matching games for input [%s].", game)
+    logging.info("Searching matching games for input [%s].", game)
 
     IGDB_client = IGDB(r_glob)
     res = IGDB_client.matching_games(game)
@@ -111,17 +111,17 @@ def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_sch
 
     auth(token)
 
-    logging.debug("Obtaining the metadata of the game ID [%s].", gameID)
+    logging.info("Obtaining the metadata of the game ID [%s].", gameID)
  
     IGDB_cli = IGDB(r_glob)
     game_data = IGDB_cli.new_game(gameID)
 
-    logging.debug("Pushing metadata of the game ID [%s] to database.", gameID)
+    logging.info("Pushing metadata of the game ID [%s] to database.", gameID)
 
     iris_cli = iris(r_glob, r_games)
     iris_cli.push_new_game(game_data["data"])
 
-    logging.debug("Game ID [%s] - Push successfull to database.", gameID)
+    logging.info("Game ID [%s] - Push successfull to database.", gameID)
 
     return {"data": game_data["data"]}
 
@@ -135,7 +135,7 @@ def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_schem
     iris_cli = iris(r_glob, r_games)
     iris_cli.del_game(gameID)
 
-    logging.debug("Deleted Game ID [%s].", gameID)
+    logging.info("Deleted Game ID [%s].", gameID)
 
 
 @ares.get("/s1/match")
@@ -144,7 +144,7 @@ def get_best_matching_games_s1(request: Request, gameID: int, token: str = Depen
 
     auth(token)
 
-    logging.debug("Searching best matching data from Source 1 for game ID [%s].", gameID)
+    logging.info("Searching best matching data from Source 1 for game ID [%s].", gameID)
 
     res_name = r_games.json().get(f"g:{gameID}", "$.name")
     if res_name:
@@ -152,12 +152,12 @@ def get_best_matching_games_s1(request: Request, gameID: int, token: str = Depen
         if not res_s1_match:
             s1_client = s1()
             res = s1_client.best_match(res_name[0])
-            logging.debug("Pushing Source 1 data for game ID [%s] to cache.", gameID)
+            logging.info("Pushing Source 1 data for game ID [%s] to cache.", gameID)
 
             r_games.json().set(f"g:{gameID}", f"$.s1", {})
             r_games.json().set(f"g:{gameID}", f"$.s1.match", res)
         else:
-            logging.debug("Source 1 data for game ID [%s] already in database.", gameID)
+            logging.info("Source 1 data for game ID [%s] already in database.", gameID)
             res = res_s1_match[0]
     else:
         raiseNoGameFound(gameID)
@@ -171,7 +171,7 @@ def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(
 
     auth(token)
 
-    logging.debug("Searching chapters for data from Source 1 for game ID [%s].", gameID)
+    logging.info("Searching chapters for data from Source 1 for game ID [%s].", gameID)
 
     res_name = r_games.json().get(f"g:{gameID}", "$.name")
     if res_name:
@@ -180,13 +180,13 @@ def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(
         if not res_s1_chapter:
             s1_client = s1()
             res = s1_client.get_chapter(id)
-            logging.debug(
+            logging.info(
                 "Pushing Source 1 chapters for game ID [%s] to cache.", gameID
             )
             r_games.json().set(f"g:{gameID}", "$.s1.videoID", id)
             r_games.json().set(f"g:{gameID}", "$.s1.chapter", res)
         else:
-            logging.debug(
+            logging.info(
                 "Source 1 chapters for game ID [%s] already in database.", gameID
             )
             res = res_s1_chapter[0]
@@ -202,7 +202,7 @@ async def get_download_s1(request: Request, vidID: str, gameID: int, token: str 
 
     auth(token)
 
-    logging.debug("Downloading audio data from Source 1 for game ID [%s].", gameID)
+    logging.info("Downloading audio data from Source 1 for game ID [%s].", gameID)
 
     res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
     if res_s1_chapter:
@@ -221,7 +221,7 @@ async def get_file_format_s1(request: Request, gameID: int, vid_dur: int, token:
 
     auth(token)
 
-    logging.debug("Formating audio data from Source 1 for game ID [%s].", gameID)
+    logging.info("Formating audio data from Source 1 for game ID [%s].", gameID)
 
     res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
 
@@ -272,7 +272,7 @@ def get_user_redis(data: object) -> None:
 
 
 @ares.get("/v1/game")
-@limiter.limit("60/minute")
+# @limiter.limit("60/minute")
 async def get_game_data(request: Request, gID: int, labels: list[str] = Query(default=['base']), debug: bool = False, forceDB: bool = False) -> dict:
     
     fData = {}
@@ -348,7 +348,7 @@ async def get_game_data(request: Request, gID: int, labels: list[str] = Query(de
 # @limiter.limit("60/minute")
 async def get_random_games(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
-    logging.debug(labels)
+    # logging.info(labels)
     data = []
     randID: list = iris_cli.getRandomCompleteGameIDs(limit)
     for gameID in randID:
@@ -360,7 +360,7 @@ async def get_random_games(request: Request, labels: list[str] = Query(default=[
 # @limiter.limit("60/minute")
 async def get_top_rated_games(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
-    logging.debug(labels)
+    # logging.info(labels)
     data = []
     topRateIDs: list = iris_cli.getTopRatedGameIDs(limit)
     for gameID in topRateIDs:
@@ -372,7 +372,7 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
 # @limiter.limit("60/minute")
 async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
-    logging.debug(labels)
+    # logging.info(labels)
     data = {}
     topRateIDs: list = iris_cli.getTopRatedCollectionIDs(limit)
     
@@ -386,7 +386,7 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
 # @limiter.limit("60/minute")
 async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']), collectionID: int = Path(0, title="Collection ID"), debug: bool = False, forceDB: bool = False) -> dict:
     
-    logging.debug(labels)
+    logging.info(labels)
     collectionData: list = iris_cli.getCollectionData(collectionID)
     collectionGameID: list = iris_cli.getGameIDofCollection(collectionID)
     
@@ -397,7 +397,7 @@ async def get_collection_by_id(request: Request, labels: list[str] = Query(defau
         },
         "games" : {}
     }
-    logging.debug(data)
+    logging.info(data)
     for game in collectionGameID:
         data["games"][game[0]] = await get_game_data(request, game[0], labels, debug, forceDB)
 

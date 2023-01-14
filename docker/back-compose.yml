@@ -11,7 +11,7 @@ services:
     ports:
       - ${POSTGRES_PORT}:5432
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD= ${POSTGRES_PASSWORD}
     volumes:
       - ./volumes/db/data:/var/lib/postgresql/data
       - ./conf/db:/docker-entrypoint-initdb.d
@@ -39,9 +39,6 @@ services:
   ares_api:
     container_name: ares
     image: dune_ares:latest
-    # build:
-    #   context: ../
-    #   dockerfile: docker/ares.dockerfile
     restart: unless-stopped
     volumes:
       - type: bind
@@ -50,10 +47,17 @@ services:
       - type: bind
         source: ../bacchus
         target: /bacchus
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - ${ARES_PORT}:5100
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - DD_SERVICE="Triton-L2"
+      - DD_ENV="prod"
+      - DD_LOGS_INJECTION=true
+      - DD_PROFILING_ENABLED=true
+      - DD_APPSEC_ENABLED=true
+      - DD_SITE=us5.datadoghq.com
+      - DD_AGENT_HOST=65.21.91.39
     depends_on:
       - iris_db
       - atlas_redis
@@ -61,10 +65,7 @@ services:
   triton_api:
     container_name: triton
     image: dune_triton:latest
-    # build:
-    #   context: ../
-    #   dockerfile: docker/triton.dockerfile
-    restart: always
+    restart: unless-stopped
     volumes:
       - type: bind
         source: ../triton/app
@@ -72,15 +73,16 @@ services:
       - type: bind
         source: ../bacchus
         target: /bacchus
-      - /proc/:/host/proc/:ro
-      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
     ports:
       - ${TRITON_PORT}:5110
-      - 127.0.0.1:8127:8126/tcp
     environment:
-      - DD_API_KEY=a387ee3a1f2f81a4dd808d750621c5db
-      - DD_SERVICE=Triton-L1
-      - DD_TRACE_STARTUP_LOGS=true
+      - DD_SERVICE="Triton-L1"
+      - DD_ENV="prod"
+      - DD_LOGS_INJECTION=true
+      - DD_PROFILING_ENABLED=true
+      - DD_APPSEC_ENABLED=true
+      - DD_SITE=us5.datadoghq.com
+      - DD_AGENT_HOST=65.21.91.39
     depends_on:
       - iris_db
       - atlas_redis

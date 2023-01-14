@@ -7,7 +7,7 @@ import logging
 import os
 import pathlib
 import redis
-from ddtrace.contrib.asgi import TraceMiddleware
+from ddtrace import patch
 
 
 
@@ -41,9 +41,11 @@ logging.basicConfig(
     format="%(asctime)s -- %(levelname)s -- %(message)s",
 )
 
- 
+patch(fastapi=True)
 triton = FastAPI()
-triton.add_middleware(TraceMiddleware)
+
+
+# triton.add_middleware(TraceMiddleware)
 
 
 validation_cat = {

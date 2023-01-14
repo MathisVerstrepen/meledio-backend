@@ -6,5 +6,4 @@ websockets
 pydub
 redis
 python-dotenv
-dd-trace
-ddtrace-asgi
+ddtrace
