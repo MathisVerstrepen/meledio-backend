@@ -356,7 +356,7 @@ async def get_random_games(request: Request, labels: list[str] = Query(default=[
     
     return {"data": data}
 
-@ares.get("/v1/game/rating/{limit}")
+@ares.get("/v1/game/top/rating/{limit}")
 # @limiter.limit("60/minute")
 async def get_top_rated_games(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating games", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
@@ -368,7 +368,7 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
     
     return {"data": data}
 
-@ares.get("/v1/game/collection/top/{limit}")
+@ares.get("/v1/collection/top/{limit}")
 # @limiter.limit("60/minute")
 async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']), limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000), debug: bool = False, forceDB: bool = False) -> dict:
     
@@ -382,7 +382,7 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
 
     return {"data": data}
 
-@ares.get("/v1/game/collection/{collectionID}")
+@ares.get("/v1/collection/{collectionID}")
 # @limiter.limit("60/minute")
 async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']), collectionID: int = Path(0, title="Collection ID"), debug: bool = False, forceDB: bool = False) -> dict:
     
