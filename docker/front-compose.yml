@@ -1,18 +1,9 @@
 version: "3.1"
 
 services:
-  athena_nuxt:
-    container_name: athena
-    build:
-      context: ../
-      dockerfile: docker/athena.dockerfile
+  dune_zeus:
+    container_name: zeus
+    image: registry.diikstra.fr/dune_zeus:latest
     restart: always
-    volumes:
-      - ../athena/app.vue:/athena/app.vue
-      - ../athena/layouts:/athena/layouts
-      - ../athena/assets:/athena/assets
-      - ../athena/components:/athena/components
-      - ../athena/pages:/athena/pages
     ports:
-      - 3100:3000
-      - 24678:24678
+      - 5080:3000

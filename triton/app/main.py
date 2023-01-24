@@ -68,13 +68,15 @@ async def get_best_matching_games(
     hash: str = Path(default=..., title="media hash/id")
 ) -> FileResponse:
 
+    headers = {"Cache-Control": "public, max-age=15552000"}
+
     format_cat = validation_cat.get(cat)
     if format_cat:
         format_qual = validation_qual.get(qual)
         if format_qual:
             file_path = f"/bacchus/media/{format_cat}_{format_qual}_{hash}.jpg"
             if exists(file_path):
-                return FileResponse(file_path)
+                return FileResponse(file_path, headers=headers)
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
