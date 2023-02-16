@@ -98,7 +98,7 @@ async def delete_media(body: dict = Body(...)) -> dict:
 
 
 @triton.get("/audio/info/{audioID}")
-async def get_audio_stream_init_info(audioID: str = Path(default=..., title="media category")) :
+async def get_audio_stream_init_info(audioID: str = Path(default=..., title="media category")):
     return {"data": audioID}
 
 @triton.websocket("/ws")
