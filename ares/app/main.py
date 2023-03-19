@@ -24,11 +24,16 @@ ares.state.limiter = limiter
 ares.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
+# Init Redis connections
 r_glob = redis.Redis(host="atlas", port=6379, db=1, password=os.getenv("REDIS_SECRET"))
 r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
 r_users = redis.Redis(host="atlas", port=6379, db=2, password=os.getenv("REDIS_SECRET"))
 
+# Init API clients
+IGDB_cli = IGDB(r_glob)
 iris_cli = iris(r_glob, r_games)
+s1_cli = s1()
 
 f = open('./app/schema.json')
 db_schema: dict = json.load(f)
@@ -51,6 +56,14 @@ logging.basicConfig(
 
 
 def auth(token: str) -> None:
+    """ Check if token is valid
+
+    Args:
+        token (str): Token to check
+
+    Raises:
+        HTTPException: If token is invalid
+    """
     if token != os.getenv("ARES_TOKEN"):
         logging.info("%s fail logging", token)
         raise HTTPException(
@@ -92,44 +105,47 @@ async def add_process_time_header(request, call_next):
     return response
 
 
+
 @ares.get("/matching_games")
 def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> dict:
+    # Get the best matching games from the IGDB API
+    
     auth(token)
 
     logging.info("Searching matching games for input [%s].", game)
 
-    IGDB_client = IGDB(r_glob)
-    res = IGDB_client.matching_games(game)
+    res = IGDB_cli.matching_games(game)
 
-    return {"data": res["data"]}
+    return {"data": res}
 
 
 @ares.post("/new_game")
 @limiter.limit("60/minute")
 def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+    # Push a new game to the database
+    
     auth(token)
 
     logging.info("Obtaining the metadata of the game ID [%s].", gameID)
 
-    IGDB_cli = IGDB(r_glob)
     game_data = IGDB_cli.new_game(gameID)
 
     logging.info("Pushing metadata of the game ID [%s] to database.", gameID)
 
-    iris_cli = iris(r_glob, r_games)
-    iris_cli.push_new_game(game_data["data"])
+    iris_cli.push_new_game(game_data)
 
     logging.info("Game ID [%s] - Push successfull to database.", gameID)
 
-    return {"data": game_data["data"]}
+    return {"data": game_data}
 
 
 @ares.delete("/del/game")
 @limiter.limit("60/minute")
 def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
+    # Delete a game from the database
+    
     auth(token)
 
-    iris_cli = iris(r_glob, r_games)
     iris_cli.del_game(gameID)
 
     logging.info("Deleted Game ID [%s].", gameID)
@@ -137,28 +153,21 @@ def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_schem
 
 @ares.get("/s1/match")
 @limiter.limit("60/minute")
-def get_best_matching_games_s1(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+    # Get the best matching video from the Source 1 API
+    
     auth(token)
 
     logging.info("Searching best matching data from Source 1 for game ID [%s].", gameID)
-
-    res_name = r_games.json().get(f"g:{gameID}", "$.name")
-    if res_name:
-        res_s1_match = r_games.json().get(f"g:{gameID}", "$.s1.match")
-        if not res_s1_match:
-            s1_client = s1()
-            res = s1_client.best_match(res_name[0])
-            logging.info("Pushing Source 1 data for game ID [%s] to cache.", gameID)
-
-            r_games.json().set(f"g:{gameID}", f"$.s1", {})
-            r_games.json().set(f"g:{gameID}", f"$.s1.match", res)
-        else:
-            logging.info("Source 1 data for game ID [%s] already in database.", gameID)
-            res = res_s1_match[0]
-    else:
+    
+    try:
+        name = iris_cli.getGameName(gameID)
+        res = s1_cli.best_match(name)
+        
+        return {"data": res}
+    except:
+        logging.error("No matching game found in database for ID [%s].", gameID)
         raiseNoGameFound(gameID)
-
-    return {"data": res}
 
 
 @ares.get("/s1/chapter")
@@ -173,8 +182,7 @@ def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(
         res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
         res_s1_chapter = False
         if not res_s1_chapter:
-            s1_client = s1()
-            res = s1_client.get_chapter(id)
+            res = s1_cli.get_chapter(id)
             logging.info(
                 "Pushing Source 1 chapters for game ID [%s] to cache.", gameID
             )
@@ -200,8 +208,6 @@ async def get_download_s1(request: Request, vidID: str, gameID: int, token: str 
 
     res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
     if res_s1_chapter:
-
-        s1_cli = s1()
         vid_dur: list = s1_cli.downloader(vidID, gameID)
     else:
         raiseNoChapterFound(gameID)
@@ -217,8 +223,7 @@ async def get_file_format_s1(request: Request, gameID: int, vid_dur: int, token:
     logging.info("Formating audio data from Source 1 for game ID [%s].", gameID)
 
     res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
-
-    s1_cli = s1()
+    
     tracklist: list = s1_cli.file_formater(
         gameID, res_s1_chapter[0], vid_dur, r_games
     )

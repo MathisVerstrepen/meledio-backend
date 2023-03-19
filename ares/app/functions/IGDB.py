@@ -18,7 +18,7 @@ def GET_IGDB_TOKEN(r):
             return IGDB_res_token['access_token']
 
     except:
-        return None
+        return None 
 
 
 def REFRESH_TOKEN():
@@ -35,24 +35,36 @@ def REFRESH_TOKEN():
 
 
 class IGDB():
+    """IGDB related functions"""
+    
     def __init__(self, r):
         self.TOKEN = GET_IGDB_TOKEN(r)
-        # logging.debug(self.TOKEN)
+        # logging.info(self.TOKEN)
         self.req_header = {
             'Accept': 'application/json',
             'Client-ID': os.getenv('IGDB_ID'),
             'Authorization': 'Bearer {0}'.format(self.TOKEN)
         }
 
-    def matching_games(self, input):
+    def matching_games(self, input: str) -> list:
+        """Get matching games from IGDB API
+
+        Args:
+            input (str): Game name
+
+        Returns:
+            list: List of matching games with score
+        """
+        
         clean_input = input.lower()
+        logging.info(self.req_header)
         IGDB_res = requests.post('https://api.igdb.com/v4/games',
                                 headers=self.req_header,
                                 data='fields name; search "{0}";'.format(clean_input))
         parsed_IGDB_res = json.loads(IGDB_res.text)
         
-        logging.debug(parsed_IGDB_res)
-        logging.debug(os.getenv('IGDB_ID'))
+        logging.info(parsed_IGDB_res)
+        logging.info(os.getenv('IGDB_ID'))
 
 
         matching_game = [{
@@ -64,9 +76,18 @@ class IGDB():
         matching_game_sort = sorted(
             matching_game, key=lambda d: d['score'], reverse=True)
 
-        return {"data": matching_game_sort[:3]}
+        return matching_game_sort[:3]
 
-    def new_game(self, gameID):
+    def new_game(self, gameID: int) -> dict: 
+        """ Get game data from IGDB API
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Game data
+        """
+        
         IGDB_res = requests.post('https://api.igdb.com/v4/games',
                                 headers=self.req_header,
                                 data="""fields name, 
@@ -93,7 +114,7 @@ class IGDB():
                                         where id={0};""".format(gameID))
         parsed_IGDB_res = json.loads(IGDB_res.text)
 
-        return {"data": parsed_IGDB_res}
+        return parsed_IGDB_res
 
     def companies(self, field_data):
         # final_data = []

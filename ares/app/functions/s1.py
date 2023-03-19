@@ -22,15 +22,20 @@ from io import BytesIO
 import pathlib
 
 
-def extract_video_info(data) -> str:
+def extract_video_info(data: tuple) -> list:
+    """ Extract video info from youtube
+
+    Args:
+        data (tuple): (query, body_data, game, URL)
+
+    Returns:
+        list: List of video info
+    """
+    
     query, body_data, game, URL = data
     body_data['query'] = game + query
     r = requests.post(URL, data=json.dumps(body_data))
     r_parse = json.loads(r.text)
-
-    # f = open(f'/ares/app/functions/json/test.json', 'w')
-    # f.write(json.dumps(r_parse))
-    # f.close()
 
     renderer = (r_parse['contents']['twoColumnSearchResultsRenderer']['primaryContents']
     ['sectionListRenderer']['contents'][0]['itemSectionRenderer']['contents'])
@@ -201,19 +206,6 @@ class LoggingCursor(psycopg2.extensions.cursor):
 
 class s1():
     def __init__(self) -> None:
-
-        # option = webdriver.ChromeOptions()
-
-        # option.add_argument("--disable-gpu")
-        # option.add_argument("--disable-extensions")
-        # option.add_argument("--disable-infobars")
-        # option.add_argument("--start-maximized")
-        # option.add_argument("--disable-notifications")
-        # option.add_argument('--headless')
-        # option.add_argument('--no-sandbox')
-        # option.add_argument('--disable-dev-shm-usage')
-
-        # self.driver = webdriver.Chrome(options=option)
         self.search_url = [
             ' game full ost',
             ' game full album',
@@ -224,27 +216,37 @@ class s1():
 
         try:
             self.conn = psycopg2.connect(database="",
-                                         user="postgres",
-                                         password=os.environ['POSTGRES_PASSWORD'],
-                                         host="iris",
-                                         port="5432")
+                                        user="postgres",
+                                        password=os.environ['POSTGRES_PASSWORD'],
+                                        host="iris",
+                                        port="5432")
         except:
             self.conn = None
+            
+        with open('/ares/app/functions/json/youtube_body.json', 'r') as f:
+            self.youtube_body = json.load(f)
 
-    def best_match(self, game: str) -> list:
+    def best_match(self, gameName: str) -> list:
+        """ Get the best matching video for a game
 
-        f = open('/ares/app/functions/json/youtube_body.json', 'r')
-        body_data = json.load(f)
-        f.close()
+        Args:
+            gameName (str): Game name
+
+        Returns:
+            list: List of best matching video
+        """
 
         URL = 'https://www.youtube.com/youtubei/v1/search'
         data_list = [
-            (query, body_data, game, URL) for query in self.search_url
+            (query, self.youtube_body, gameName, URL) for query in self.search_url
         ]
 
+        # Extract the video info from the search results using multiprocessing pool
         p = Pool(len(data_list)).map(extract_video_info, data_list)
         outputs = [result for result in p]
+        logging.info(outputs)
 
+        # Merge all the outputs
         final = {}
         for output in outputs:
             position = len(output)
@@ -263,7 +265,17 @@ class s1():
                             final[videoId] = [position, title, duration]
                         position -= 1
 
-        return (sorted(final.items(), key=lambda tup: tup[1][0], reverse=True))[0:10]
+        # Sort the final output by score and return the top 5
+        final_sorted = (sorted(final.items(), key=lambda tup: tup[1][0], reverse=True))[0:5]
+        return_value = {}
+        for video in final_sorted:
+            return_value[video[0]] = {
+                "title": video[1][1],
+                "duration": video[1][2],
+                "score": video[1][0],
+            }
+            
+        return return_value
 
     def get_chapter(self, id: str) -> list:
 
@@ -290,14 +302,23 @@ class s1():
 
         URL = f'http://www.youtube.com/watch?v={vidID}'
 
+        # ydl_opts = {
+        #     'outtmpl': f'/bacchus/audio/{gameID}/temp.m4a',
+        #     'format': 'm4a/bestaudio/best',
+        #     'postprocessors': [{
+        #         'key': 'FFmpegExtractAudio',
+        #         'preferredcodec': 'm4a',
+        #     }],
+        # }
         ydl_opts = {
-            'outtmpl': f'/bacchus/audio/{gameID}/temp.m4a',
-            'format': 'm4a/bestaudio/best',
+            'outtmpl': f'/bacchus/audio/{gameID}/temp.wav',
+            'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'm4a',
+                'preferredcodec': 'wav',
             }],
         }
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(URL, download=False)
             vid_dur = info['duration']

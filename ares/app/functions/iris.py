@@ -100,6 +100,12 @@ class iris:
                 table=sql.Identifier(table))
         curs.execute(query, (id,))
         return curs.fetchone()
+    
+    def getGameName(self, gameID: int) -> str:
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT name FROM iris.game WHERE id = %s;")
+            curs.execute(query, (gameID,))
+            return curs.fetchone()[0]
 
     def getRandomCompleteGameIDs(self, number: int):
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -170,25 +176,26 @@ class iris:
     #                                 PUSH NEW GAME                                #
     # ---------------------------------------------------------------------------- #
 
-    def push_new_game(self, game_data):
+    def push_new_game(self, game_data: dict) -> None:
+        """Push new game to database
+
+        Args:
+            game_data (_type_): _description_
+        """
+        
         gameID = game_data[0]["id"]
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-            INCACHE = self.isGameCached(gameID)
             INDB = self.isGameInDatabase(curs, "game", gameID)
             
-            if INCACHE == None:
-                #-- Construct base cache data --#
-                self.rcli.json().set(f"g:{gameID}", "$", {'complete': False})
-
             if not INDB:
                 #-- Contruct base db data --# 
                 query = "INSERT INTO iris.game (id) VALUES (%s);"
                 data = (gameID, )
                 curs.execute(query, data)
 
-            if not INDB or not INDB[0] or INCACHE == None or not all(INCACHE):
+            if not INDB or not INDB[0]:
                 #-- Upload all metadata to DB and cache --#
                 
                 for field in game_data[0]:
@@ -206,10 +213,7 @@ class iris:
                         logging.info(query)
                         logging.info(data)
                         curs.execute(query, data)
-                        
-                        cache_data = field_data if field != 'category' else SQL_category.get(str(field_data))
-                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", cache_data)
-                        
+                                                
                     #-- Game table root column but type date --# 
                     elif field_type == 'date':
                         
@@ -217,9 +221,7 @@ class iris:
                                 field=sql.Identifier(field_schema_data.get('field')))
                         data = (datetime.fromtimestamp(field_data), gameID,)
                         curs.execute(query, data)
-                        
-                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", field_data)
-                        
+                                                
                     #-- Game table root column but parent game --# 
                     elif field_type == 'parent':
                         logging.info(field_data)
@@ -227,16 +229,12 @@ class iris:
                             query = sql.SQL("INSERT INTO iris.game (id, complete, name) VALUES (%s,False,%s);")
                             data = (field_data["id"], field_data["name"],)
                             curs.execute(query, data)
-                            
-                            self.rcli.json().set(f"g:{field_data['id']}", "$",{"complete": False, "name": field_data["name"]},)
-                        
+                                                    
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
                                 field=sql.Identifier(field_schema_data.get('field')))
                         data = (field_data["id"], gameID,)
                         curs.execute(query, data)
-                        
-                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('field')}", field_data["id"])
-                        
+                                                
                     #-- All sort of extra content of the game --# 
                     elif field_type == 'extra':
                         for extra_data in field_data:
@@ -245,8 +243,6 @@ class iris:
                                 data = (extra_data["id"], extra_data["name"],)
                                 curs.execute(query, data)
                                 
-                                self.rcli.json().set(f"g:{extra_data['id']}", "$",{"complete": False, "name": extra_data["name"]},)
-
                             query = sql.SQL("INSERT INTO iris.{table} (game_id, extra_id, type) VALUES (%s,%s,%s);").format(
                                     table=sql.Identifier(field_schema_data.get('field')))
                             data = (gameID, extra_data["id"], field,)
@@ -263,9 +259,7 @@ class iris:
                             )
                         data = [*field_data.values()]
                         curs.execute(query, data)
-                        
-                        self.rcli.json().set(f"g:{gameID}", f"$.{field_schema_data.get('base_field')}", field_data.get('id'))
-                        
+                                                
                         #-- Update root game table --# 
                         query = sql.SQL("UPDATE iris.game SET {field} = %s WHERE id=%s;").format(
                                 field=sql.Identifier(field_schema_data.get('base_field')))
@@ -325,22 +319,12 @@ class iris:
                             
                             thread = threading.Thread(target=image_downloader, args=(self.IGDB_client, field, media))
                             thread.start()
-                            
-                        mediaFieldExist = self.rcli.json().get(f"g:{gameID}", f"$.media")
-                        if not mediaFieldExist:
-                            self.rcli.json().set(f"g:{gameID}", f"$.media", {
-                                "artworks" : [],
-                                "screenshots": [],
-                                "cover": None
-                            })
                         
                         if isinstance(field_data, list):
                             for media in field_data: 
                                 insert_media(media)
-                                self.rcli.json().arrappend(f"g:{gameID}", f"$.media.{field}", media.get("image_id"))
                         else:
                             insert_media(field_data)
-                            self.rcli.json().set(f"g:{gameID}", f"$.media.{field}", field_data.get("image_id"))
                             
                     #-- All other tables --#
                     elif field_type == 'normal':
@@ -356,9 +340,7 @@ class iris:
                     query = sql.SQL("UPDATE iris.game SET complete = true WHERE id=%s;")
                     data = (gameID,)
                     curs.execute(query, data)
-                    
-                    self.rcli.json().set(f"g:{gameID}", "$.complete", True)
-                
+                                    
         self.conn.commit()
 
     def del_game(self, gameID: int) -> bool:
