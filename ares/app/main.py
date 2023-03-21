@@ -172,47 +172,28 @@ def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth
 
 @ares.get("/s1/chapter")
 @limiter.limit("60/minute")
-def get_chapter_s1(request: Request, id: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+def get_chapter_s1(request: Request, videoID: str, token: str = Depends(oauth2_scheme)) -> dict:
+    # Get the chapter data from the Source 1
+    
     auth(token)
 
-    logging.info("Searching chapters for data from Source 1 for game ID [%s].", gameID)
-
-    res_name = r_games.json().get(f"g:{gameID}", "$.name")
-    if res_name:
-        res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
-        res_s1_chapter = False
-        if not res_s1_chapter:
-            res = s1_cli.get_chapter(id)
-            logging.info(
-                "Pushing Source 1 chapters for game ID [%s] to cache.", gameID
-            )
-            r_games.json().set(f"g:{gameID}", "$.s1.videoID", id)
-            r_games.json().set(f"g:{gameID}", "$.s1.chapter", res)
-        else:
-            logging.info(
-                "Source 1 chapters for game ID [%s] already in database.", gameID
-            )
-            res = res_s1_chapter[0]
-    else:
-        raiseNoGameFound(gameID)
-
-    return {"data": res}
+    logging.info("Obtaining the chapter data from Source 1 for video ID [%s].", videoID)    
+    chapters = s1_cli.get_chapter(videoID)
+    
+    return {"data": chapters}
 
 
 @ares.get("/s1/download")
 @limiter.limit("60/minute")
 async def get_download_s1(request: Request, vidID: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
+    # Download the audio data from the Source 1
+    
     auth(token)
 
     logging.info("Downloading audio data from Source 1 for game ID [%s].", gameID)
+    audio_duration: int = s1_cli.downloader(vidID, gameID)
 
-    res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
-    if res_s1_chapter:
-        vid_dur: list = s1_cli.downloader(vidID, gameID)
-    else:
-        raiseNoChapterFound(gameID)
-
-    return {"data": {"vid_dur": vid_dur}}
+    return {"data": {"audio_duration": audio_duration}}
 
 
 @ares.get("/s1/format_file")

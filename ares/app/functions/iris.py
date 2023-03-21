@@ -87,13 +87,6 @@ class iris:
             logging.error("Can't connect to DB")
             logging.error(e)
             self.conn = None
-            
-    def isGameCached(self, gameID: str):
-        return self.rcli.json().get(f"g:{gameID}", "$.complete")
-
-    def isMainAlbumCached(self, gameID: str):
-        res = self.rcli.json().get(f"g:{gameID}", "$.album[0]")
-        return res if res else None
 
     def isGameInDatabase(self, curs, table, id):
         query = sql.SQL("SELECT complete FROM iris.{table} where id=%s;").format(
@@ -106,6 +99,39 @@ class iris:
             query = sql.SQL("SELECT name FROM iris.game WHERE id = %s;")
             curs.execute(query, (gameID,))
             return curs.fetchone()[0]
+        
+    def getAlbum(self, gameID: int, albumName: str) -> list:
+        """Get the playlist of a game by its name if it exists
+
+        Args:
+            gameID (int): Game ID
+            albumName (str): Name of the album
+
+        Returns:
+            list: List of track IDs
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""SELECT track_id FROM iris.album WHERE game_id = %s AND name = %s;""")
+            curs.execute(query, (gameID, albumName))
+            if curs.rowcount == 0:
+                return []
+            return curs.fetchall()
+        
+    def addAlbum(self, gameID: int, albumName: str, trackIDs: list):
+        """ Add a new album to the database
+
+        Args:
+            gameID (int): Game ID
+            albumName (str): Album name
+            trackIDs (list): List of track IDs
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""INSERT INTO iris.album (game_id, name, track_id) VALUES (%s, %s, %s);""")
+            curs.execute(query, (gameID, albumName, trackIDs))
+        
+        self.conn.commit()
 
     def getRandomCompleteGameIDs(self, number: int):
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:

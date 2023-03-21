@@ -291,27 +291,25 @@ class s1():
 
         return chapter_data
 
-    def downloader(self, vidID: str, gameID: int) -> list:
+    def downloader(self, vidID: str, gameID: int) -> int:
+        """ Download the audio from a video
 
-        dir = f'/bacchus/audio/{gameID}'
-        try:
-            shutil.rmtree(dir)
-        except:
-            pass
-        os.mkdir(dir)
+        Args:
+            vidID (str): Video ID
+            gameID (int): Game ID
+
+        Returns:
+            int: video duration in seconds
+        """
+
+        # Remove the temp file if it exists 
+        file = f'/bacchus/audio/{gameID}/temp.wav'
+        try: os.remove(file)
+        except: pass
 
         URL = f'http://www.youtube.com/watch?v={vidID}'
-
-        # ydl_opts = {
-        #     'outtmpl': f'/bacchus/audio/{gameID}/temp.m4a',
-        #     'format': 'm4a/bestaudio/best',
-        #     'postprocessors': [{
-        #         'key': 'FFmpegExtractAudio',
-        #         'preferredcodec': 'm4a',
-        #     }],
-        # }
         ydl_opts = {
-            'outtmpl': f'/bacchus/audio/{gameID}/temp.wav',
+            'outtmpl': f'/bacchus/audio/{gameID}/temp',
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -319,6 +317,7 @@ class s1():
             }],
         }
         
+        # Download the audio file and get the duration
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(URL, download=False)
             vid_dur = info['duration']
@@ -386,9 +385,9 @@ class s1():
                 curs.execute(query, data)
 
                 p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
-                                      str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy',
-                                      '-y', f'/bacchus/audio/{gameID}/{file_uuid}.m4a'], shell=False,
-                                     stdin=None, stdout=None, stderr=None, close_fds=True)
+                                    str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy',
+                                    '-y', f'/bacchus/audio/{gameID}/{file_uuid}.m4a'], shell=False,
+                                    stdin=None, stdout=None, stderr=None, close_fds=True)
                 subprocess_list.append(p)
 
                 tracklist.append({
