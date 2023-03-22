@@ -180,6 +180,11 @@ def get_chapter_s1(request: Request, videoID: str, token: str = Depends(oauth2_s
     logging.info("Obtaining the chapter data from Source 1 for video ID [%s].", videoID)    
     chapters = s1_cli.get_chapter(videoID)
     
+    # Save chapter data in a file
+    file_path = f"/bacchus/chapters/{videoID}.json"
+    with open(file_path, "w") as f:
+        f.write(json.dumps(chapters))
+    
     return {"data": chapters}
 
 
@@ -192,22 +197,28 @@ async def get_download_s1(request: Request, vidID: str, gameID: int, token: str 
 
     logging.info("Downloading audio data from Source 1 for game ID [%s].", gameID)
     audio_duration: int = s1_cli.downloader(vidID, gameID)
+    
+    # Correction of audio timestamps
+    s1_cli.fix_audio_timestamp(gameID, vidID)
 
     return {"data": {"audio_duration": audio_duration}}
 
 
 @ares.get("/s1/format_file")
 @limiter.limit("60/minute")
-async def get_file_format_s1(request: Request, gameID: int, vid_dur: int, token: str = Depends(oauth2_scheme)) -> dict:
+async def get_file_format_s1(request: Request, gameID: int, vidID: str, duration: int, token: str = Depends(oauth2_scheme)) -> dict:
+    # Format the audio data from the Source 1
+    
     auth(token)
 
     logging.info("Formating audio data from Source 1 for game ID [%s].", gameID)
-
-    res_s1_chapter = r_games.json().get(f"g:{gameID}", "$.s1.chapter")
     
-    tracklist: list = s1_cli.file_formater(
-        gameID, res_s1_chapter[0], vid_dur, r_games
-    )
+    # Get the chapter data from the file
+    file_path = f"/bacchus/chapters/{vidID}.json"
+    with open(file_path, "r") as f:
+        chapters = json.loads(f.read())
+    
+    tracklist: list = s1_cli.file_formater(gameID, chapters, duration, r_games)
 
     return {"data": tracklist}
 

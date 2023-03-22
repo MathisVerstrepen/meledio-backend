@@ -20,6 +20,8 @@ import glob
 import shutil
 from io import BytesIO
 import pathlib
+import numpy as np
+from scipy.io import wavfile
 
 
 def extract_video_info(data: tuple) -> list:
@@ -360,11 +362,9 @@ class s1():
 
     def file_formater(self, gameID: int, chapters: list, vid_dur: int, r_games) -> list:
 
-        r_games.json().set(f"g:{gameID}", "$.album", [])
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
 
-            game_name_slug = slugify(r_games.json().get(f"g:{gameID}", '$.slug')[0] + " full album")
             subprocess_list = []
             tracklist = []
 
@@ -381,11 +381,11 @@ class s1():
                 track_id = curs.fetchall()[0][0]
 
                 query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
-                data = (gameID, track_id, "Full Album", game_name_slug)
+                data = (gameID, track_id, "Full Album", "full-album")
                 curs.execute(query, data)
 
-                p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.m4a', '-ss',
-                                    str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c', 'copy',
+                p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.wav', '-ss',
+                                    str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c:a', 'aac', '-b:a', '256k',
                                     '-y', f'/bacchus/audio/{gameID}/{file_uuid}.m4a'], shell=False,
                                     stdin=None, stdout=None, stderr=None, close_fds=True)
                 subprocess_list.append(p)
@@ -404,15 +404,46 @@ class s1():
 
         r_games.json().arrinsert(f"g:{gameID}", "$.album", 0, {
             "name": "Full Album",
-            "slug": game_name_slug,
+            "slug": "test",
             "track": tracklist
         })
 
         for index, track in enumerate(tracklist):
             Thread(target=s1.format_audio, args=(gameID, track['file'], index, r_games,)).start()
 
-        os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
+        # os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
 
         self.conn.commit()
 
         return tracklist
+
+    def index_moyenne_proche_de_zero(self, arr):
+        abs_arr = np.abs(arr)
+        moyennes = []
+        for i in range(0, len(arr), 100):
+            debut = max(0, i-100)
+            fin = min(len(arr), i+100)
+            moyenne = np.mean(abs_arr[debut:fin])
+            moyennes.append(moyenne)
+        moyennes = np.array(moyennes)
+        return np.argmin(moyennes)*100
+
+    def fix_audio_timestamp(self, gameID: int, vidID: str):
+        file_path = f"/bacchus/chapters/{vidID}.json"
+        with open(file_path, "r") as f:
+            chapters = json.loads(f.read())
+            
+        AudioName = f"/bacchus/audio/{gameID}/temp.wav"
+        fs_wav, data_wav = wavfile.read(AudioName)
+        
+        for ch in chapters[1:]:
+            print(ch['title'])
+            ch_wav = data_wav[int((ch['timestamp'] - 20) * fs_wav):int((ch['timestamp'] + 20) * fs_wav), 0]
+            
+            closest_index = self.index_moyenne_proche_de_zero(ch_wav)
+
+            logging.debug(f"Closest index: {closest_index}")
+            ch['corrected_timestamp'] = ch['timestamp'] - 20 + closest_index / fs_wav
+            
+        with open(file_path, "w") as f:
+            f.write(json.dumps(chapters, indent=4))

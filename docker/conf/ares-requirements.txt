@@ -16,3 +16,5 @@ yt_dlp
 awesome-slugify
 pydub
 ddtrace
+scipy
+numpy

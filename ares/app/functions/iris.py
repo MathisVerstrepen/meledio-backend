@@ -543,7 +543,6 @@ class iris:
             column = ['id', 'game_id', 'name', 'comment']
 
             return [{column[i]:row[i] for i in range(4)} for row in res]
-       
 
 class iris_user:
     def __init__(self):
