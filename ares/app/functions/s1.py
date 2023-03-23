@@ -1,28 +1,31 @@
-# from selenium import webdriver
-import requests
-import json
-from rich import print
-import yt_dlp
 import os
-import subprocess
-from datetime import timedelta
-from pydub import AudioSegment
+import json
 import uuid
-from multiprocessing import Pool
-from threading import Thread
-import psycopg2
-import psycopg2.extensions
-from psycopg2 import sql
-from slugify import slugify
 import logging
-import re
-import glob
-import shutil
-from io import BytesIO
 import pathlib
+import requests
+import psycopg2
 import numpy as np
+import yt_dlp
+from io import BytesIO
+from slugify import slugify
+from pydub import AudioSegment
+from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
 from scipy.io import wavfile
+from psycopg2 import sql
+import psycopg2.extensions
 
+class LoggingCursor(psycopg2.extensions.cursor):
+    def execute(self, sql, args=None):
+        logger = logging.getLogger('sql_debug')
+        logger.info(self.mogrify(sql, args))
+
+        try:
+            psycopg2.extensions.cursor.execute(self, sql, args)
+        except Exception as exc:
+            logger.error("%s: %s" % (exc.__class__.__name__, exc))
+            raise
 
 def extract_video_info(data: tuple) -> list:
     """ Extract video info from youtube
@@ -43,7 +46,6 @@ def extract_video_info(data: tuple) -> list:
     ['sectionListRenderer']['contents'][0]['itemSectionRenderer']['contents'])
 
     return renderer
-
 
 class chapter_scrap():
     def __init__(self, id: str) -> None:
@@ -193,19 +195,6 @@ class chapter_scrap():
 
                     return lpart[start_index:end_index + 1]
 
-
-class LoggingCursor(psycopg2.extensions.cursor):
-    def execute(self, sql, args=None):
-        logger = logging.getLogger('sql_debug')
-        logger.info(self.mogrify(sql, args))
-
-        try:
-            psycopg2.extensions.cursor.execute(self, sql, args)
-        except Exception as exc:
-            logger.error("%s: %s" % (exc.__class__.__name__, exc))
-            raise
-
-
 class s1():
     def __init__(self) -> None:
         self.search_url = [
@@ -228,7 +217,7 @@ class s1():
         with open('/ares/app/functions/json/youtube_body.json', 'r') as f:
             self.youtube_body = json.load(f)
 
-    def best_match(self, gameName: str) -> list:
+    def best_video_match(self, gameName: str) -> list:
         """ Get the best matching video for a game
 
         Args:
@@ -315,7 +304,8 @@ class s1():
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
+                'preferredcodec': 'wav',  # Changer le format à WAV non compressé
+                'preferredquality': '320',  # Qualité audio en kilobits par seconde (320 kbps)
             }],
         }
         
@@ -327,108 +317,36 @@ class s1():
 
         return vid_dur
 
-    def format_audio(gameID: int, audioID: str, audioIndex: int, r_games):
-        audio = AudioSegment.from_file(f"/bacchus/audio/{gameID}/{audioID}.m4a")
-        audioLength = len(audio)
-        audioMetadata = []
+    def index_moyenne_proche_de_zero(self, arr: np.ndarray) -> int:
+        """ Compute the index of the array where the mean is closest to zero
 
-        dir = f"/bacchus/audio/{gameID}/{audioID}"
-        if (not os.path.isdir(dir)): os.makedirs(dir)
-        files = glob.glob(f"/bacchus/audio/{gameID}/{audioID}/*")
-        for f in files:
-            os.remove(f)
+        Args:
+            arr (np.ndarray): Numpy array of waveform data
 
-        currentTimecode = 0
-        while currentTimecode < audioLength - 10 * 1000:
-            currentTimecodeDelay = currentTimecode if currentTimecode == 0 else currentTimecode - 100
-            cutAudio = audio[currentTimecodeDelay:currentTimecode + (10 * 1000 + 100)]
+        Returns:
+            int: Index of the array where the mean is closest to zero
+        """
 
-            wavIO = BytesIO()
-            cutAudio.export(wavIO, format="mp3")
-            pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
-
-            audioMetadata.append(currentTimecode)
-            currentTimecode += 10 * 1000
-
-        cutAudio = audio[currentTimecode - 100:audioLength]
-        wavIO = BytesIO()
-        cutAudio.export(wavIO, format="mp3")
-        pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{currentTimecode}").write_bytes(wavIO.getbuffer())
-        audioMetadata.append(currentTimecode)
-
-        r_games.json().set(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta", audioMetadata)
-
-        logging.debug(f'Format track {audioID}')
-
-    def file_formater(self, gameID: int, chapters: list, vid_dur: int, r_games) -> list:
-
-
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-
-            subprocess_list = []
-            tracklist = []
-
-            for i in range(len(chapters)):
-                file_uuid = uuid.uuid4().hex
-                title_slug = slugify(chapters[i]['title'])
-                start = chapters[i]['timestamp']
-                end = vid_dur if i >= len(chapters) - 1 else chapters[i + 1]['timestamp']
-
-                query = sql.SQL("INSERT INTO iris.track (game_id, title, slug, file, view_count, like_count, length) "
-                                "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;")
-                data = (gameID, chapters[i]['title'], title_slug, file_uuid, 0, 0, end - start)
-                curs.execute(query, data)
-                track_id = curs.fetchall()[0][0]
-
-                query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
-                data = (gameID, track_id, "Full Album", "full-album")
-                curs.execute(query, data)
-
-                p = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', f'/bacchus/audio/{gameID}/temp.wav', '-ss',
-                                    str(timedelta(seconds=start)), '-to', str(timedelta(seconds=end)), '-c:a', 'aac', '-b:a', '256k',
-                                    '-y', f'/bacchus/audio/{gameID}/{file_uuid}.m4a'], shell=False,
-                                    stdin=None, stdout=None, stderr=None, close_fds=True)
-                subprocess_list.append(p)
-
-                tracklist.append({
-                    'id': track_id,
-                    'title': chapters[i]['title'],
-                    'slug': title_slug,
-                    'file': file_uuid,
-                    'view_count': 0,
-                    'like_count': 0,
-                    'length': end - start
-                })
-
-        [p.wait() for p in subprocess_list]
-
-        r_games.json().arrinsert(f"g:{gameID}", "$.album", 0, {
-            "name": "Full Album",
-            "slug": "test",
-            "track": tracklist
-        })
-
-        for index, track in enumerate(tracklist):
-            Thread(target=s1.format_audio, args=(gameID, track['file'], index, r_games,)).start()
-
-        # os.remove(f"/bacchus/audio/{gameID}/temp.m4a")
-
-        self.conn.commit()
-
-        return tracklist
-
-    def index_moyenne_proche_de_zero(self, arr):
         abs_arr = np.abs(arr)
         moyennes = []
+        
         for i in range(0, len(arr), 100):
             debut = max(0, i-100)
             fin = min(len(arr), i+100)
             moyenne = np.mean(abs_arr[debut:fin])
             moyennes.append(moyenne)
         moyennes = np.array(moyennes)
+        
         return np.argmin(moyennes)*100
 
-    def fix_audio_timestamp(self, gameID: int, vidID: str):
+    def fix_audio_timestamp(self, gameID: int, vidID: str) -> None:
+        """ Fix audio timestamp extracted from youtube
+
+        Args:
+            gameID (int): Game ID
+            vidID (str): Video ID
+        """
+        
         file_path = f"/bacchus/chapters/{vidID}.json"
         with open(file_path, "r") as f:
             chapters = json.loads(f.read())
@@ -437,13 +355,87 @@ class s1():
         fs_wav, data_wav = wavfile.read(AudioName)
         
         for ch in chapters[1:]:
-            print(ch['title'])
             ch_wav = data_wav[int((ch['timestamp'] - 20) * fs_wav):int((ch['timestamp'] + 20) * fs_wav), 0]
-            
             closest_index = self.index_moyenne_proche_de_zero(ch_wav)
-
-            logging.debug(f"Closest index: {closest_index}")
             ch['corrected_timestamp'] = ch['timestamp'] - 20 + closest_index / fs_wav
             
         with open(file_path, "w") as f:
             f.write(json.dumps(chapters, indent=4))
+    
+    def cut_and_save_audio_segment(self, gameID: int, file_uuid: str, audio: list, start: int, end: int):
+        """ Cut and save the audio segment
+
+        Args:
+            gameID (int): Game ID
+            file_uuid (str): File UUID
+            audio (list): Full audio file
+            start (int): Start timecode
+            end (int): End timecode
+        """
+        
+        # Cut the audio file into 10 second chunks
+        currentTimecode = start
+        while currentTimecode < end - 10 * 1000:
+            currentTimecodeDelay = currentTimecode if currentTimecode == 0 else currentTimecode - 100
+            cutAudio = audio[currentTimecodeDelay:currentTimecode + (10 * 1000 + 100)]
+
+            wavIO = BytesIO()
+            cutAudio.export(wavIO, format="mp3")
+            pathlib.Path(f"/bacchus/audio/{gameID}/{file_uuid}/{int(currentTimecode - start)}").write_bytes(wavIO.getbuffer())
+
+            currentTimecode += 10 * 1000
+
+        # Cut the last audio file (less than 10 seconds)
+        cutAudio = audio[currentTimecode - 100:end]
+        wavIO = BytesIO()
+        cutAudio.export(wavIO, format="mp3")
+    
+    def full_audio_format(self, gameID: int, chapters: list) -> None:
+        """ Format the full audio file into 10 second chunks
+
+        Args:
+            gameID (int): Game ID
+            chapters (list): List of chapters
+            duration (int): Video duration in seconds
+        """
+
+        # Load the full audio file
+        audio = AudioSegment.from_file(f"/bacchus/audio/{gameID}/temp.wav")
+        duration = len(audio)
+
+        # Cut the audio file into 10 second chunks
+        tasks = []
+        tracks_id = []
+        with ThreadPoolExecutor() as executor, self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            for i, chapter in enumerate(chapters):
+                start = chapter.get('corrected_timestamp', chapter['timestamp'])*1000
+                end = duration if i >= len(chapters) - 1 else chapters[i + 1].get('corrected_timestamp', chapters[i]['timestamp'])*1000
+                file_uuid = uuid.uuid4().hex
+                os.mkdir(f"/bacchus/audio/{gameID}/{file_uuid}")
+                
+                task = executor.submit(self.cut_and_save_audio_segment, gameID, file_uuid, audio, start, end)
+                tasks.append(task)
+                
+                query = sql.SQL("INSERT INTO iris.track (game_id, title, slug, file, view_count, like_count, length)"
+                                "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;")
+                data = (gameID, chapter['title'], slugify(chapter['title']), file_uuid, 0, 0, end - start)
+                curs.execute(query, data)
+                tracks_id.append(curs.fetchone()[0])
+
+        # Wait for all tasks to complete
+        for task in tasks:
+            task.result()
+            
+        # Add the track to the database album table
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT name FROM iris.game WHERE id = %s;")
+            curs.execute(query, (gameID,))
+            name = curs.fetchone()[0]
+            name_slug = slugify(name)
+            
+            for track_id in tracks_id:
+                query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
+                data = (gameID, track_id, "Full Album", name_slug + "-full-album-unconfirmed")
+                curs.execute(query, data)
+                
+        self.conn.commit()

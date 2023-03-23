@@ -229,14 +229,22 @@ chapter = [
 			"timestamp": 7480.0
 		}
 	]
-# os.remove('temp.png')
-AudioName = "../../../bacchus/audio/103054/temp.wav.wav" # Audio File
+# # os.remove('temp.png')
 
-# read WAV file using scipy.io.wavfile
-fs_wav, data_wav = wavfile.read(AudioName)
+# AudioName = "../../../bacchus/audio/103054/temp.wav" # Audio File
+# # read WAV file using scipy.io.wavfile
+# fs_wav, data_wav = wavfile.read(AudioName)
 
-print('Sampling Frequency = {} Hz'.format(fs_wav))
-print('Signal Duration = {} seconds'.format(data_wav.shape[0] / fs_wav))
+# print('Sampling Frequency = {} Hz'.format(fs_wav))
+# print('Signal Duration = {} seconds'.format(data_wav.shape[0] / fs_wav))
+
+from pydub import AudioSegment
+AudioName = "../../../bacchus/audio/103054/temp.opus" # Audio File
+# read OPUS file using pydub
+audio = AudioSegment.from_file(AudioName, format="ogg_opus")
+# convert to WAV format
+data_wav = np.array(audio.get_array_of_samples())
+fs_wav = audio.frame_rate
 
 
 time_wav = np.arange(0, len(data_wav)) / fs_wav

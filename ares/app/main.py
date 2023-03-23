@@ -162,7 +162,7 @@ def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth
     
     try:
         name = iris_cli.getGameName(gameID)
-        res = s1_cli.best_match(name)
+        res = s1_cli.best_video_match(name)
         
         return {"data": res}
     except:
@@ -206,7 +206,7 @@ async def get_download_s1(request: Request, vidID: str, gameID: int, token: str 
 
 @ares.get("/s1/format_file")
 @limiter.limit("60/minute")
-async def get_file_format_s1(request: Request, gameID: int, vidID: str, duration: int, token: str = Depends(oauth2_scheme)) -> dict:
+def get_file_format_s1(request: Request, gameID: int, vidID: str, duration: int, token: str = Depends(oauth2_scheme)) -> dict:
     # Format the audio data from the Source 1
     
     auth(token)
@@ -217,10 +217,11 @@ async def get_file_format_s1(request: Request, gameID: int, vidID: str, duration
     file_path = f"/bacchus/chapters/{vidID}.json"
     with open(file_path, "r") as f:
         chapters = json.loads(f.read())
-    
-    tracklist: list = s1_cli.file_formater(gameID, chapters, duration, r_games)
+        
+    iris_cli.check_album_unconfirmed(gameID)
+    s1_cli.full_audio_format(gameID, chapters)
 
-    return {"data": tracklist}
+    return {"data": 'tracklist'}
 
 
 @ares.get("/r1/new")

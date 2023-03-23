@@ -10,6 +10,7 @@ import requests
 from datetime import datetime
 import redis
 import redis.commands.search.aggregation as aggregations
+from slugify import slugify
 
 from dotenv import load_dotenv
 
@@ -117,6 +118,31 @@ class iris:
             if curs.rowcount == 0:
                 return []
             return curs.fetchall()
+        
+    def check_album_unconfirmed(self, gameID: int) -> None:
+        """Check if an album unconfirmed exists for a game and delete it if it does
+
+        Args:
+            gameID (int): Game ID
+        """
+        
+        game_name = self.getGameName(gameID)
+        game_name_slug = slugify(game_name)
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("""SELECT count(*)>0 FROM iris.album WHERE game_id = %s AND slug = %s;""")
+            data = (gameID, game_name_slug + "-full-album-unconfirmed")
+            curs.execute(query, data)
+            
+            res = curs.fetchone()[0]
+            if res:
+                logging.info("Album unconfirmed found, deleting it...")
+            
+                # Delete album and tracks
+                query = sql.SQL("""DELETE FROM iris.album WHERE game_id = %s AND slug = %s;""")
+                data = (gameID, game_name_slug + "-full-album-unconfirmed")
+                curs.execute(query, data)
+                self.conn.commit()
+
         
     def addAlbum(self, gameID: int, albumName: str, trackIDs: list):
         """ Add a new album to the database
