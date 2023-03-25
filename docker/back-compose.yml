@@ -11,10 +11,15 @@ services:
     ports:
       - ${POSTGRES_PORT}:5432
     environment:
-      - POSTGRES_PASSWORD= ${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./volumes/db/data:/var/lib/postgresql/data
       - ./conf/db:/docker-entrypoint-initdb.d
+    healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U postgres"]
+          interval: 5s
+          timeout: 5s
+          retries: 5
 
   redis-overcommit:
     build: https://github.com/bkuhl/redis-overcommit-on-host.git
@@ -59,8 +64,10 @@ services:
       - DD_SITE=us5.datadoghq.com
       - DD_AGENT_HOST=65.21.91.39
     depends_on:
-      - iris_db
-      - atlas_redis
+      iris_db:
+        condition: service_healthy
+      atlas_redis:
+        condition: service_started
 
   triton_api:
     container_name: triton

@@ -1,6 +1,8 @@
 import os
+import re
 import json
 import uuid
+import shutil
 import logging
 import pathlib
 import requests
@@ -397,7 +399,15 @@ class s1():
             gameID (int): Game ID
             chapters (list): List of chapters
             duration (int): Video duration in seconds
-        """
+        """ 
+        
+        # Remove old audio files directory
+        def delete_dirs(path):
+            for file in os.listdir(path):
+                full_path = os.path.join(path, file)
+                if os.path.isdir(full_path):
+                    shutil.rmtree(full_path)
+        delete_dirs(f"/bacchus/audio/{gameID}")
 
         # Load the full audio file
         audio = AudioSegment.from_file(f"/bacchus/audio/{gameID}/temp.wav")
@@ -430,12 +440,17 @@ class s1():
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             query = sql.SQL("SELECT name FROM iris.game WHERE id = %s;")
             curs.execute(query, (gameID,))
-            name = curs.fetchone()[0]
+            name = curs.fetchone()[0] + " - Full OST"
             name_slug = slugify(name)
             
+            query = sql.SQL("INSERT INTO iris.album (game_id, name, slug, is_main) VALUES (%s,%s,%s,%s) RETURNING id;")
+            data = (gameID, name, name_slug, 't')
+            curs.execute(query, data)
+            album_id = curs.fetchone()[0]
+            
             for track_id in tracks_id:
-                query = sql.SQL("INSERT INTO iris.album (game_id, track_id, name, slug) VALUES (%s,%s,%s,%s);")
-                data = (gameID, track_id, "Full Album", name_slug + "-full-album-unconfirmed")
+                query = sql.SQL("INSERT INTO iris.album_track (album_id, track_id) VALUES (%s,%s);")
+                data = (album_id, track_id)
                 curs.execute(query, data)
                 
         self.conn.commit()

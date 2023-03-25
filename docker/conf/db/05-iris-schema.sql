@@ -1,4 +1,5 @@
 CREATE SCHEMA IF NOT EXISTS iris AUTHORIZATION supabase_admin;
+GRANT USAGE ON SCHEMA iris TO postgres;
 
 -- --------------------collection-------------------- --
 
@@ -79,13 +80,23 @@ ALTER TABLE iris.track ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
 CREATE TABLE iris.album (
   "id" SERIAL PRIMARY KEY,
   "game_id" int,
-  "track_id" int,
   "name" text,
-  "slug" text
+  "slug" text,
+  "is_ready" boolean DEFAULT false,
+  "is_main" boolean DEFAULT false
 );
 
 ALTER TABLE iris.album ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
-ALTER TABLE iris.album ADD FOREIGN KEY ("track_id") REFERENCES iris.track ("id");
+
+-- --------------------album<->track-------------------- --
+
+
+CREATE TABLE iris.album_track (
+  "album_id" int,
+  "track_id" int,
+
+  PRIMARY KEY ("album_id", "track_id")
+);
 
 -- --------------------playlist-------------------- --
 
@@ -185,3 +196,59 @@ INSERT INTO iris.category (id, name) VALUES
   (10, 'expanded_game'),
   (11, 'port'),
   (12, 'fork');
+
+
+-- --------------------Function / Triggers-------------------- --
+
+/*
+  Delete all the tracks of an album when the album is deleted if the album is the only album of the track
+*/
+
+CREATE OR REPLACE FUNCTION delete_album_track() RETURNS trigger AS $$
+BEGIN
+  DELETE FROM iris.track
+  WHERE id IN (
+    SELECT track_id
+    FROM iris.album_track
+    WHERE album_id = OLD.id
+  )
+  AND id NOT IN (
+    SELECT track_id
+    FROM iris.album_track
+    WHERE album_id != OLD.id
+  );
+  DELETE FROM iris.album_track
+  WHERE album_id = OLD.id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER delete_album_track
+AFTER DELETE ON iris.album
+FOR EACH ROW
+EXECUTE PROCEDURE delete_album_track();
+
+/*
+  When a new album is created, check if the album already exists and if it does, delete it
+*/
+
+CREATE OR REPLACE FUNCTION check_album() RETURNS trigger AS $$
+BEGIN
+  IF EXISTS (
+    SELECT *
+    FROM iris.album
+    WHERE game_id = NEW.game_id
+    AND name = NEW.name
+  ) THEN
+    DELETE FROM iris.album
+    WHERE game_id = NEW.game_id
+    AND name = NEW.name;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_album
+BEFORE INSERT ON iris.album
+FOR EACH ROW
+EXECUTE PROCEDURE check_album();

@@ -218,7 +218,6 @@ def get_file_format_s1(request: Request, gameID: int, vidID: str, duration: int,
     with open(file_path, "r") as f:
         chapters = json.loads(f.read())
         
-    iris_cli.check_album_unconfirmed(gameID)
     s1_cli.full_audio_format(gameID, chapters)
 
     return {"data": 'tracklist'}
@@ -337,8 +336,8 @@ async def get_game_data(request: Request, gID: int, labels: list[str] = Query(de
 @ares.get("/v1/game/random/{limit}")
 # @limiter.limit("60/minute")
 async def get_random_games(request: Request, labels: list[str] = Query(default=['base']),
-                           limit: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False,
-                           forceDB: bool = False) -> dict:
+                        limit: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False,
+                        forceDB: bool = False) -> dict:
     # logging.info(labels)
     data = []
     randID: list = iris_cli.getRandomCompleteGameIDs(limit)
@@ -351,8 +350,8 @@ async def get_random_games(request: Request, labels: list[str] = Query(default=[
 @ares.get("/v1/game/top/rating/{limit}")
 # @limiter.limit("60/minute")
 async def get_top_rated_games(request: Request, labels: list[str] = Query(default=['base']),
-                              limit: int = Path(0, title="Number of top rating games", gt=0, le=1000),
-                              debug: bool = False, forceDB: bool = False) -> dict:
+                            limit: int = Path(0, title="Number of top rating games", gt=0, le=1000),
+                            debug: bool = False, forceDB: bool = False) -> dict:
     # logging.info(labels)
     data = []
     topRateIDs: list = iris_cli.getTopRatedGameIDs(limit)
@@ -365,8 +364,8 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
 @ares.get("/v1/collection/top/{limit}")
 # @limiter.limit("60/minute")
 async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']),
-                                   limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000),
-                                   debug: bool = False, forceDB: bool = False) -> dict:
+                                limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000),
+                                debug: bool = False, forceDB: bool = False) -> dict:
     # logging.info(labels)
     data = {}
     topRateIDs: list = iris_cli.getTopRatedCollectionIDs(limit)
@@ -382,8 +381,8 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
 @ares.get("/v1/collection/{collectionID}")
 # @limiter.limit("60/minute")
 async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']),
-                               collectionID: int = Path(0, title="Collection ID"), debug: bool = False,
-                               forceDB: bool = False) -> dict:
+                            collectionID: int = Path(0, title="Collection ID"), debug: bool = False,
+                            forceDB: bool = False) -> dict:
     logging.info(labels)
     collectionData: list = iris_cli.getCollectionData(collectionID)
     collectionGameID: list = iris_cli.getGameIDofCollection(collectionID)
@@ -405,7 +404,7 @@ async def get_collection_by_id(request: Request, labels: list[str] = Query(defau
 @ares.get("/v1/game/search/{searchText}")
 # @limiter.limit("60/minute")
 async def get_collection_by_id(request: Request, searchText: str = Path(0, title="Search game text"),
-                               debug: bool = False) -> dict:
+                            debug: bool = False) -> dict:
     searchResults = iris_cli.searchGameByName(searchText)
 
     return {"data": searchResults}
