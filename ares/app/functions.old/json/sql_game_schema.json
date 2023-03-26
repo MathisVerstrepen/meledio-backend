@@ -1,0 +1,96 @@
+{
+    "id": {
+        "type" : "",
+        "field" : ""
+    },
+    "category": {
+        "type" : "base",
+        "field" : "category"
+    },
+    "first_release_date": {
+        "type" : "date",
+        "field" : "first_release_date"
+    },
+    "name": {
+        "type" : "base",
+        "field" : "name"
+    },
+    "parent_game": {
+        "type" : "parent",
+        "field" : "parent_game"
+    },
+    "rating": {
+        "type" : "base",
+        "field" : "rating"
+    },
+    "slug": {
+        "type" : "base",
+        "field" : "slug"
+    },
+    "summary": {
+        "type" : "base",
+        "field" : "summary"
+    },
+    "dlcs": {
+        "type" : "extra",
+        "field" : "extra_content"
+    },
+    "expansions": {
+        "type" : "extra",
+        "field" : "extra_content"
+    },
+    "expanded_games": {
+        "type" : "extra",
+        "field" : "extra_content"
+    },
+    "similar_games": {
+        "type" : "extra",
+        "field" : "extra_content"
+    },
+    "standalone_expansions": {
+        "type" : "extra",
+        "field" : "extra_content"
+    },
+    "alternative_names": {
+        "type" : "normal",
+        "field" : "alternative_name"
+    },
+    "artworks": {
+        "type" : "media",
+        "field" : "media"
+    },
+    "collection": {
+        "type" : "base-ext",
+        "field" : "collection",
+        "base_field": "collection_id"
+    },
+    "cover": {
+        "type" : "media",
+        "field" : "media"
+    },
+    "franchise": {
+        "type" : "",
+        "field" : ""
+    },
+    "genres": {
+        "type" : "normal",
+        "field" : "genre"
+    },
+    "involved_companies": {
+        "type" : "company",
+        "field" : "involved_companies",
+        "sub_field" : "company"
+    },
+    "keywords": {
+        "type" : "normal",
+        "field" : "keyword"
+    },
+    "themes": {
+        "type" : "normal",
+        "field" : "theme"
+    },
+    "screenshots": {
+        "type" : "media",
+        "field" : "media"
+    }
+}

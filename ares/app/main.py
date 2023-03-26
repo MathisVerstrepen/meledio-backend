@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Path, Query
+# type: ignore
+
+from fastapi import FastAPI, Depends, Request, Path, Query
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -9,13 +11,15 @@ import redis
 import json
 import time
 import logging
+import logging.handlers
 from timeit import default_timer as timer
 
-from app.functions.IGDB import IGDB
-from app.functions.iris import iris, iris_user
-from app.functions.s1 import s1
-from dotenv import load_dotenv
+from app.clients.igdb_cli import IGDB
+from app.clients.iris_cli import iris, iris_user
+from app.clients.s1_cli import s1
+from app.utils.errors import raiseNoGameFound, raiseNoChapterFound, raiseNoUserFound, raiseAuthFailed
 
+from dotenv import load_dotenv
 load_dotenv()
 
 limiter = Limiter(key_func=get_remote_address)
@@ -31,8 +35,8 @@ r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_S
 r_users = redis.Redis(host="atlas", port=6379, db=2, password=os.getenv("REDIS_SECRET"))
 
 # Init API clients
-IGDB_cli = IGDB(r_glob)
-iris_cli = iris(r_glob, r_games)
+IGDB_cli = IGDB()
+iris_cli = iris()
 s1_cli = s1()
 
 f = open('./app/schema.json')
@@ -47,53 +51,13 @@ ares.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(
-    filename="app/logs/ares.log",
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s -- %(levelname)s -- %(message)s",
-)
+from app.utils.loggers import get_base_logger
+base_logger = get_base_logger()
 
 
-def auth(token: str) -> None:
-    """ Check if token is valid
-
-    Args:
-        token (str): Token to check
-
-    Raises:
-        HTTPException: If token is invalid
-    """
+def admin_auth(token: str):
     if token != os.getenv("ARES_TOKEN"):
-        logging.info("%s fail logging", token)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
-def raiseNoGameFound(gameID: int) -> None:
-    logging.error("No matching game found in database for ID [%s].", gameID)
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No matching game found in database for ID {gameID}",
-    )
-
-
-def raiseNoChapterFound(gameID: int) -> None:
-    logging.error("No chapter found in database for ID [%s].", gameID)
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No chapter found in database for gameID {gameID}",
-    )
-
-
-def raiseNoUserFound(userID: int) -> None:
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No user found in database for userID {userID}",
-    )
+        raiseAuthFailed()
 
 
 @ares.middleware("http")
@@ -105,14 +69,13 @@ async def add_process_time_header(request, call_next):
     return response
 
 
-
 @ares.get("/matching_games")
 def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> dict:
     # Get the best matching games from the IGDB API
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Searching matching games for input [%s].", game)
+    base_logger.info("Searching matching games for input [%s].", game)
 
     res = IGDB_cli.matching_games(game)
 
@@ -124,17 +87,17 @@ def get_best_matching_games(game: str, token: str = Depends(oauth2_scheme)) -> d
 def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
     # Push a new game to the database
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Obtaining the metadata of the game ID [%s].", gameID)
+    base_logger.info("Obtaining the metadata of the game ID [%s].", gameID)
 
     game_data = IGDB_cli.new_game(gameID)
 
-    logging.info("Pushing metadata of the game ID [%s] to database.", gameID)
+    base_logger.info("Pushing metadata of the game ID [%s] to database.", gameID)
 
     iris_cli.push_new_game(game_data)
 
-    logging.info("Game ID [%s] - Push successfull to database.", gameID)
+    base_logger.info("Game ID [%s] - Push successfull to database.", gameID)
 
     return {"data": game_data}
 
@@ -144,11 +107,11 @@ def push_new_game(request: Request, gameID: int, token: str = Depends(oauth2_sch
 def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> None:
     # Delete a game from the database
     
-    auth(token)
+    admin_auth(token)
 
     iris_cli.del_game(gameID)
 
-    logging.info("Deleted Game ID [%s].", gameID)
+    base_logger.info("Deleted Game ID [%s].", gameID)
 
 
 @ares.get("/s1/match")
@@ -156,9 +119,9 @@ def delete_game(request: Request, gameID: int, token: str = Depends(oauth2_schem
 def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
     # Get the best matching video from the Source 1 API
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Searching best matching data from Source 1 for game ID [%s].", gameID)
+    base_logger.info("Searching best matching data from Source 1 for game ID [%s].", gameID)
     
     try:
         name = iris_cli.getGameName(gameID)
@@ -166,7 +129,7 @@ def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth
         
         return {"data": res}
     except:
-        logging.error("No matching game found in database for ID [%s].", gameID)
+        base_logger.error("No matching game found in database for ID [%s].", gameID)
         raiseNoGameFound(gameID)
 
 
@@ -175,10 +138,12 @@ def get_matching_video(request: Request, gameID: int, token: str = Depends(oauth
 def get_chapter_s1(request: Request, videoID: str, token: str = Depends(oauth2_scheme)) -> dict:
     # Get the chapter data from the Source 1
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Obtaining the chapter data from Source 1 for video ID [%s].", videoID)    
+    base_logger.info("Obtaining the chapter data from Source 1 for video ID [%s].", videoID)    
     chapters = s1_cli.get_chapter(videoID)
+    if chapters == []:
+        raiseNoChapterFound(videoID)
     
     # Save chapter data in a file
     file_path = f"/bacchus/chapters/{videoID}.json"
@@ -193,9 +158,9 @@ def get_chapter_s1(request: Request, videoID: str, token: str = Depends(oauth2_s
 async def get_download_s1(request: Request, vidID: str, gameID: int, token: str = Depends(oauth2_scheme)) -> dict:
     # Download the audio data from the Source 1
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Downloading audio data from Source 1 for game ID [%s].", gameID)
+    base_logger.info("Downloading audio data from Source 1 for game ID [%s].", gameID)
     audio_duration: int = s1_cli.downloader(vidID, gameID)
     
     # Correction of audio timestamps
@@ -206,12 +171,12 @@ async def get_download_s1(request: Request, vidID: str, gameID: int, token: str 
 
 @ares.get("/s1/format_file")
 @limiter.limit("60/minute")
-def get_file_format_s1(request: Request, gameID: int, vidID: str, duration: int, token: str = Depends(oauth2_scheme)) -> dict:
+def get_file_format_s1(request: Request, gameID: int, vidID: str, token: str = Depends(oauth2_scheme)) -> dict:
     # Format the audio data from the Source 1
     
-    auth(token)
+    admin_auth(token)
 
-    logging.info("Formating audio data from Source 1 for game ID [%s].", gameID)
+    base_logger.info("Formating audio data from Source 1 for game ID [%s].", gameID)
     
     # Get the chapter data from the file
     file_path = f"/bacchus/chapters/{vidID}.json"
@@ -338,7 +303,7 @@ async def get_game_data(request: Request, gID: int, labels: list[str] = Query(de
 async def get_random_games(request: Request, labels: list[str] = Query(default=['base']),
                         limit: int = Path(0, title="Number of random games", gt=0, le=1000), debug: bool = False,
                         forceDB: bool = False) -> dict:
-    # logging.info(labels)
+    # base_logger.info(labels)
     data = []
     randID: list = iris_cli.getRandomCompleteGameIDs(limit)
     for gameID in randID:
@@ -352,7 +317,7 @@ async def get_random_games(request: Request, labels: list[str] = Query(default=[
 async def get_top_rated_games(request: Request, labels: list[str] = Query(default=['base']),
                             limit: int = Path(0, title="Number of top rating games", gt=0, le=1000),
                             debug: bool = False, forceDB: bool = False) -> dict:
-    # logging.info(labels)
+    # base_logger.info(labels)
     data = []
     topRateIDs: list = iris_cli.getTopRatedGameIDs(limit)
     for gameID in topRateIDs:
@@ -366,7 +331,7 @@ async def get_top_rated_games(request: Request, labels: list[str] = Query(defaul
 async def get_top_rated_collection(request: Request, labels: list[str] = Query(default=['base']),
                                 limit: int = Path(0, title="Number of top rating collection", gt=0, le=1000),
                                 debug: bool = False, forceDB: bool = False) -> dict:
-    # logging.info(labels)
+    # base_logger.info(labels)
     data = {}
     topRateIDs: list = iris_cli.getTopRatedCollectionIDs(limit)
 
@@ -383,7 +348,7 @@ async def get_top_rated_collection(request: Request, labels: list[str] = Query(d
 async def get_collection_by_id(request: Request, labels: list[str] = Query(default=['base']),
                             collectionID: int = Path(0, title="Collection ID"), debug: bool = False,
                             forceDB: bool = False) -> dict:
-    logging.info(labels)
+    base_logger.info(labels)
     collectionData: list = iris_cli.getCollectionData(collectionID)
     collectionGameID: list = iris_cli.getGameIDofCollection(collectionID)
 
@@ -394,7 +359,7 @@ async def get_collection_by_id(request: Request, labels: list[str] = Query(defau
         },
         "games": {}
     }
-    logging.info(data)
+    base_logger.info(data)
     for game in collectionGameID:
         data["games"][game[0]] = await get_game_data(request, game[0], labels, debug, forceDB)
 

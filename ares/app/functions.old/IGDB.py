@@ -6,31 +6,41 @@ import os
 import logging
 
 
-def GET_IGDB_TOKEN(r):
+def get_igdb_token(r):
+    token = r.json().get('IGDB_TOKEN', "$.access_token")
+
+    if not token:
+        token = refresh_igdb_token(r)
+    
+    token = token[0]
+    # Test if token is still valid
+    headers = {
+        'Client-ID': os.getenv('IGDB_ID'),
+        'Authorization': f'Bearer {token}'
+    }
+    response = requests.get('https://api.igdb.com/v4/games', headers=headers)
+
+    if response.status_code != 200:
+        # Token is invalid, refresh it
+        token = refresh_igdb_token(r)
+
+    return token
+
+def refresh_igdb_token(r):
     try:
-        RES_TOKEN = r.json().get('IGDB_TOKEN', "$.access_token")
-
-        if RES_TOKEN:
-            return RES_TOKEN[0]
-        else:
-            IGDB_res_token = REFRESH_TOKEN()
-            r.json().set('IGDB_TOKEN', "$", IGDB_res_token)
-            return IGDB_res_token['access_token']
-
-    except:
-        return None 
-
-
-def REFRESH_TOKEN():
-    try:
-        IGDB_res = requests.post('https://id.twitch.tv/oauth2/token', data={
+        response = requests.post('https://id.twitch.tv/oauth2/token', data={
             'client_id': os.getenv('IGDB_ID'),
             'client_secret': os.getenv('IGDB_SECRET'),
             'grant_type': 'client_credentials'
         })
 
-        return json.loads(IGDB_res.text)
-    except:
+        response.raise_for_status()
+        data = response.json()
+
+        r.json().set('IGDB_TOKEN', "$", data['access_token'])
+        return data['access_token']
+    except requests.exceptions.RequestException as e:
+        print(f'Failed to refresh IGDB token: {e}')
         return None
 
 
@@ -38,8 +48,7 @@ class IGDB():
     """IGDB related functions"""
     
     def __init__(self, r):
-        self.TOKEN = GET_IGDB_TOKEN(r)
-        # logging.info(self.TOKEN)
+        self.TOKEN = get_igdb_token(r)
         self.req_header = {
             'Accept': 'application/json',
             'Client-ID': os.getenv('IGDB_ID'),
@@ -57,15 +66,10 @@ class IGDB():
         """
         
         clean_input = input.lower()
-        logging.info(self.req_header)
         IGDB_res = requests.post('https://api.igdb.com/v4/games',
                                 headers=self.req_header,
                                 data='fields name; search "{0}";'.format(clean_input))
         parsed_IGDB_res = json.loads(IGDB_res.text)
-        
-        logging.info(parsed_IGDB_res)
-        logging.info(os.getenv('IGDB_ID'))
-
 
         matching_game = [{
             'id': game['id'],

@@ -1,0 +1,62 @@
+{
+  "context": {
+    "client": {
+      "hl": "fr",
+      "gl": "FR",
+      "remoteHost": "46.193.68.56",
+      "deviceMake": "",
+      "deviceModel": "",
+      "visitorData": "CgtqQWduc2xIUkZlUSjHnv6XBg%3D%3D",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0,gzip(gfe)",
+      "clientName": "WEB",
+      "clientVersion": "2.20220817.06.01",
+      "osName": "Windows",
+      "osVersion": "10.0",
+      "originalUrl": "",
+      "platform": "DESKTOP",
+      "clientFormFactor": "UNKNOWN_FORM_FACTOR",
+      "configInfo": {
+        "appInstallData": "CMee_pcGELfLrQUQ1IOuBRDK7P0SEJOvrgUQy6KuBRC4i64FEPu6rgUQ4rmuBRCt_P0SENS6rgUQ2L6tBRCR-PwS"
+      },
+      "userInterfaceTheme": "USER_INTERFACE_THEME_DARK",
+      "timeZone": "Europe/Paris",
+      "browserName": "Firefox",
+      "browserVersion": "101.0",
+      "screenWidthPoints": 1920,
+      "screenHeightPoints": 947,
+      "screenPixelDensity": 1,
+      "screenDensityFloat": 1,
+      "utcOffsetMinutes": 120,
+      "mainAppWebInfo": {
+        "graftUrl": "",
+        "webDisplayMode": "WEB_DISPLAY_MODE_BROWSER",
+        "isWebNativeShareAvailable": false
+      }
+    },
+    "user": { "lockedSafetyMode": false },
+    "request": { "useSsl": true, "internalExperimentFlags": [], "consistencyTokenJars": [] },
+    "clickTracking": { "clickTrackingParams": "CJUBELsvGAMiEwj12_W_gNP5AhXsQXoFHSmwAG4=" },
+    "adSignalsInfo": {
+      "params": [
+        { "key": "dt", "value": "1660915509051" },
+        { "key": "flash", "value": "0" },
+        { "key": "frm", "value": "0" },
+        { "key": "u_tz", "value": "120" },
+        { "key": "u_his", "value": "2" },
+        { "key": "u_h", "value": "1080" },
+        { "key": "u_w", "value": "1920" },
+        { "key": "u_ah", "value": "1032" },
+        { "key": "u_aw", "value": "1920" },
+        { "key": "u_cd", "value": "24" },
+        { "key": "bc", "value": "31" },
+        { "key": "bih", "value": "947" },
+        { "key": "biw", "value": "1920" },
+        { "key": "brdim", "value": "-1928,164,-1928,164,1920,172,1936,1048,1920,947" },
+        { "key": "vis", "value": "1" },
+        { "key": "wgl", "value": "true" },
+        { "key": "ca_type", "value": "image" }
+      ]
+    }
+  },
+  "continuation": ""
+}
