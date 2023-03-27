@@ -10,7 +10,6 @@ import os
 import redis
 import json
 import time
-import logging
 import logging.handlers
 from timeit import default_timer as timer
 
@@ -51,8 +50,8 @@ ares.add_middleware(
     allow_headers=["*"],
 )
 
-from app.utils.loggers import get_base_logger
-base_logger = get_base_logger()
+import app.utils.loggers
+base_logger = app.utils.loggers.base_logger
 
 
 def admin_auth(token: str):

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 
-from app.utils.loggers import get_base_logger
-base_logger = get_base_logger()
+import app.utils.loggers
+base_logger = app.utils.loggers.base_logger
 
 def raiseNoGameFound(gameID: int) -> None:
     base_logger.error("No matching game found in database for ID [%s].", gameID)

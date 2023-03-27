@@ -26,8 +26,10 @@ Iris_client = iris()
 from app.utils.loggers import get_database_logger
 sql_logger, LoggingCursor = get_database_logger()
 
-from app.utils.loggers import get_base_logger
-base_logger = get_base_logger()
+import app.utils.loggers
+base_logger = app.utils.loggers.base_logger
+
+# from app.main import base_logger
 
 def extract_video_info(data: tuple) -> list:
     """ Extract video info from youtube
@@ -68,6 +70,9 @@ class chapter_scrap():
         ntext = len(text)
         index = 0
         lastWatchEndpoint = -1
+        
+        base_logger.info(ntext)
+        base_logger.info(type(text))
 
         while (index < ntext):
 
@@ -103,9 +108,52 @@ class chapter_scrap():
             index = nextIndex
 
         return chapter_data
+    
+    def extract_titles_and_timestamps_v2(self, json_data):
+        command_runs = json_data["attributedDescription"]["commandRuns"]
+        content = json_data["attributedDescription"]["content"]
+        titles_and_timestamps = []
+        last_timestamp = -1
+
+        for command_run in command_runs:
+            title_start = command_run["startIndex"]
+            title_length = command_run["length"]
+            title_end = title_start + title_length
+            
+            prev_char = content[title_start - 1:title_start]
+            while prev_char != "\n" and title_start > 0:
+                title_start -= 1
+                prev_char = content[title_start - 1:title_start]
+                
+            next_char = content[title_end:title_end + 1]
+            while next_char != "\n" and title_end < len(content):
+                title_end += 1
+                next_char = content[title_end:title_end + 1]
+
+            title = content[title_start : title_end].strip()
+            # Remove timecode from title
+            for timecode in re.findall(r"\d\d:\d\d", title):
+                title = title.replace(timecode, "")
+                
+            # Remove remaining whitespace and characters
+            start_index = 0
+            while start_index < len(title) and not title[start_index].isalnum():
+                start_index += 1
+            end_index = len(title) - 1
+            while end_index >= 0 and not title[end_index].isalnum():
+                end_index -= 1
+            title = title[start_index : end_index + 1]
+            
+            watchEndpoint = command_run["onTap"]["innertubeCommand"].get("watchEndpoint")
+            if watchEndpoint:
+                timestamp = command_run["onTap"]["innertubeCommand"]["watchEndpoint"]["startTimeSeconds"]
+                if timestamp > last_timestamp:
+                    last_timestamp = timestamp
+                    titles_and_timestamps.append({"timestamp": timestamp, "title": title})
+
+        return titles_and_timestamps
 
     def by_youtube_data(self):
-
         try:
             chapters = (self.vid_meta['playerOverlays']['playerOverlayRenderer']['decoratedPlayerBarRenderer']
             ['decoratedPlayerBarRenderer']['playerBar']['multiMarkersPlayerBarRenderer']['markersMap'][0]['value'][
@@ -124,13 +172,15 @@ class chapter_scrap():
         return chapter_data
 
     def by_video_desc(self):
-        try:
+
+        try:            
             desc = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
-            ['contents'][1]['videoSecondaryInfoRenderer']['description']['runs'])
+            ['contents'][1]['videoSecondaryInfoRenderer'])
+            
         except Exception:
             chapter_data = None
         else:
-            chapter_data = self.extract_chapter_data(desc)
+            chapter_data = self.extract_titles_and_timestamps_v2(desc)
 
         return chapter_data
 

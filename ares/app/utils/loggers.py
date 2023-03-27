@@ -2,21 +2,19 @@ import logging
 import logging.handlers
 import psycopg2
 
-def get_base_logger():
-    base_logger = logging.getLogger("uvicorn")
-    base_logger.setLevel(logging.INFO)
-    base_handler = logging.handlers.RotatingFileHandler(
-        "app/logs/ares.log", 
-        maxBytes=10000000, 
-        backupCount=5, 
-        encoding="utf-8"
-    )
+base_logger = logging.getLogger("uvicorn")
+base_logger.setLevel(logging.INFO)
+base_handler = logging.handlers.RotatingFileHandler(
+    "app/logs/ares.log", 
+    maxBytes=10000000, 
+    backupCount=5, 
+    encoding="utf-8"
+)
 
-    base_formatter = logging.Formatter("%(asctime)s -- %(levelname)s -- %(message)s")
-    base_handler.setFormatter(base_formatter)
+base_formatter = logging.Formatter("%(asctime)s -- %(levelname)s -- %(message)s")
+base_handler.setFormatter(base_formatter)
 
-    base_logger.addHandler(base_handler)
-    return base_logger
+base_logger.addHandler(base_handler)
 
 def get_database_logger():
     # Création du logger pour les commandes SQL
