@@ -2,7 +2,10 @@
 *.m4a
 *.log
 *.log.*
+logs
 __pycache__
 audio
 bacchus
-docker/volumes/*
+docker/volumes
+docker/backups
+*.html
