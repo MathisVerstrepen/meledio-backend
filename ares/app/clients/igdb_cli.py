@@ -8,7 +8,6 @@ import redis
 import json
 import os
 
-
 def get_igdb_token(r):
     token = r.json().get('IGDB_TOKEN', "$.access_token")
 

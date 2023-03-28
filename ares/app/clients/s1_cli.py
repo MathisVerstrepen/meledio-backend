@@ -29,8 +29,6 @@ sql_logger, LoggingCursor = get_database_logger()
 import app.utils.loggers
 base_logger = app.utils.loggers.base_logger
 
-# from app.main import base_logger
-
 def extract_video_info(data: tuple) -> list:
     """ Extract video info from youtube
 
@@ -53,63 +51,104 @@ def extract_video_info(data: tuple) -> list:
 
 class chapter_scrap():
     def __init__(self, id: str) -> None:
-        r = requests.get(
-            f'https://www.youtube.com/watch?v={id}')
-
+        r = requests.get(f'https://www.youtube.com/watch?v={id}')
         r_cut_1 = r.text.split('var ytInitialData = ')[1]
         r_cut_2 = r_cut_1.split(';</script><script')[0]
 
         self.vid_meta = json.loads(r_cut_2)
         self.id = id
+        
         self.continuation_token = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
         ['contents'][-1]['itemSectionRenderer']['contents'][0]['continuationItemRenderer']
         ['continuationEndpoint']['continuationCommand']['token'])
-
-    def extract_chapter_data(self, text):
-        chapter_data = []
-        ntext = len(text)
-        index = 0
-        lastWatchEndpoint = -1
         
-        base_logger.info(ntext)
-        base_logger.info(type(text))
+        with open('/ares/app/json/youtube_comments_body.json', 'r') as f:
+            self.youtube_comments_body = json.load(f)
+            
+    def format_line(self, line: str) -> str:
+        """Format a YouTube chapter line to remove timecodes and other characters.
 
-        while (index < ntext):
+        Args:
+            line (str): Line to format
 
-            hasNavigationEndpoint = False
-            watchEndpoint = -1
+        Returns:
+            str: Formatted line
+        """
 
-            nextIndex = index + 1
-            while nextIndex < ntext and not '\n' in text[nextIndex].get('text'):
-                if text[nextIndex].get('navigationEndpoint'):
-                    if watchEndpoint == -1: watchEndpoint = text[nextIndex].get('navigationEndpoint').get(
-                        'watchEndpoint', {}).get('startTimeSeconds')
-                    if watchEndpoint != None: hasNavigationEndpoint = True
+        # Remove leading and trailing whitespace, and select the first non-empty line
+        line = line.strip().split('\n')[0] if line.strip().split('\n')[0] else line.strip().split('\n')[1]
+        
+        # Remove timecode from title
+        for timecode in re.findall(r'\b(?:\d{1,2}:)?\d{1,2}:\d{1,2}\b|\b\d{1,2}:\d{1,2}\b', line):
+            line = line.replace(timecode, "")
+            
+        # If the line contains any alphabetical characters, proceed with formatting
+        if re.search('[a-zA-Z]', line):
+            # Find the first alphabetical character in the line
+            start_index = next((i for i, c in enumerate(line) if c.isalpha()), 0)
 
-                nextIndex += 1
+            # Find the last alphabetical or numeric character in the line
+            end_index = next((i for i, c in reversed(list(enumerate(line))) if c.isalnum()), len(line) - 1)
 
-            if hasNavigationEndpoint and lastWatchEndpoint < watchEndpoint:
-                fullRowElt = []
+            # Return the formatted line
+            return line[start_index:end_index + 1]
 
-                fullRowElt.append(text[index].get('text').split('\n')[-1])
+        return ""
 
-                for tmpIndex in range(index + 1, nextIndex):
-                    fullRowElt.append(text[tmpIndex].get('text'))
+    def extract_chapter_comment_data(self, comments: list) -> list:
+        """Extract chapter data from YouTube comments.
 
-                if nextIndex < ntext: fullRowElt.append(text[nextIndex].get('text').split('\n')[0])
+        Args:
+            comments (list): List of YouTube comments
 
+        Returns:
+            list: List of chapter data including titles and timestamps
+        """
+
+        chapter_data = []
+        ntext = len(comments)
+        index = 0
+        last_watch_endpoint = -1
+
+        while index < ntext:
+            # Initialize variables for the current iteration
+            watch_endpoint = -1
+
+            # Iterate through the subsequent comments to find the next newline character
+            next_index = index + 1
+            while next_index < ntext and '\n' not in comments[next_index]['text']:
+                navigation_endpoint = comments[next_index].get('navigationEndpoint')
+                if navigation_endpoint and watch_endpoint == -1:
+                    watch_endpoint = navigation_endpoint.get('watchEndpoint', {}).get('startTimeSeconds')
+
+                next_index += 1
+
+            # If a navigation endpoint is found and the watch endpoint is greater than the last one,
+            # extract the chapter data and add it to the list
+            if watch_endpoint is not None and last_watch_endpoint < watch_endpoint:
+                full_row_elt = []
+
+                # Extract text data from the current comment and subsequent comments
+                full_row_elt.append(comments[index]['text'].split('\n')[-1])
+                for tmp_index in range(index + 1, next_index):
+                    full_row_elt.append(comments[tmp_index]['text'])
+
+                # If there are more comments, add the first line of the next comment
+                if next_index < ntext:
+                    full_row_elt.append(comments[next_index]['text'].split('\n')[0])
+
+                # Add the extracted chapter data to the list
                 chapter_data.append({
-                    'title': self.format_line(fullRowElt),
-                    'timestamp': watchEndpoint
+                    'title': self.format_line("".join(full_row_elt)),
+                    'timestamp': watch_endpoint
                 })
-                lastWatchEndpoint = watchEndpoint
+                last_watch_endpoint = watch_endpoint
 
-                watchEndpoint = -1
-            index = nextIndex
+            index = next_index
 
         return chapter_data
     
-    def extract_titles_and_timestamps_v2(self, json_data: dict) -> list:
+    def extract_chapter_description_data(self, json_data: dict) -> list:
         """ Extract titles and timestamps from json data of a youtube video
 
         Args:
@@ -141,19 +180,7 @@ class chapter_scrap():
                 title_end += 1
                 next_char = content[title_end:title_end + 1]
 
-            title = content[title_start : title_end].strip()
-            # Remove timecode from title
-            for timecode in re.findall(r"\d\d:\d\d", title):
-                title = title.replace(timecode, "")
-                
-            # Remove remaining whitespace and characters
-            start_index = 0
-            while start_index < len(title) and not title[start_index].isalnum():
-                start_index += 1
-            end_index = len(title) - 1
-            while end_index >= 0 and not title[end_index].isalnum():
-                end_index -= 1
-            title = title[start_index : end_index + 1]
+            title = self.format_line(content[title_start : title_end])
             
             # Get timestamp and add to list if it is greater than the last timestamp
             watchEndpoint = command_run["onTap"]["innertubeCommand"].get("watchEndpoint")
@@ -165,85 +192,80 @@ class chapter_scrap():
 
         return titles_and_timestamps
 
-    def by_youtube_data(self):
+    def by_youtube_data(self) -> list:
+        """ Extract chapter data from youtube embedded data
+
+        Returns:
+            list: List of chapter data
+        """
+        
+        chapter_data = []
         try:
             chapters = (self.vid_meta['playerOverlays']['playerOverlayRenderer']['decoratedPlayerBarRenderer']
-            ['decoratedPlayerBarRenderer']['playerBar']['multiMarkersPlayerBarRenderer']['markersMap'][0]['value'][
-                'chapters'])
-        except Exception:
-            chapter_data = None
-        else:
-            chapter_data = []
+            ['decoratedPlayerBarRenderer']['playerBar']['multiMarkersPlayerBarRenderer']['markersMap'][0]['value']['chapters'])
             for chapter in chapters:
-                title = self.format_line([chapter['chapterRenderer']['title']['simpleText']])
+                title = self.format_line(chapter['chapterRenderer']['title']['simpleText'])
                 chapter_data.append({
                     'title': title,
                     'timestamp': chapter['chapterRenderer']['timeRangeStartMillis'] / 1000
                 })
+        except Exception:
+            base_logger.warning('Error extracting chapter data from youtube data')
 
         return chapter_data
 
-    def by_video_desc(self):
+    def by_video_desc(self) -> list:
+        """ Extract chapter data from video description
+
+        Returns:
+            list: List of chapter data
+        """
 
         try:            
-            desc = (self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']
-            ['contents'][1]['videoSecondaryInfoRenderer'])
+            desc = self.vid_meta['contents']['twoColumnWatchNextResults']['results']['results']['contents'][1]['videoSecondaryInfoRenderer']
+            chapter_data = self.extract_chapter_description_data(desc)
             
+            # Check if chapter data has enough data (more than 3 chapters)
+            if len(chapter_data) <= 3:
+                chapter_data = []
+                
         except Exception:
-            chapter_data = None
-        else:
-            chapter_data = self.extract_titles_and_timestamps_v2(desc)
-
+            chapter_data = []
+            base_logger.warning('Error extracting chapter data from video description')
+            
         return chapter_data
 
-    def by_video_comments(self):
-        with open('/ares/app/json/youtube_comments_body.json', 'r') as f:
+    def by_video_comments(self) -> list:
+        """ Extract chapter data from video comments
 
-            body_data = json.load(f)
+        Returns:
+            list: List of chapter data
+        """
+        
+        vid_url = f"https://www.youtube.com/watch?v={self.id}"
+        self.youtube_comments_body['context']['client']['originalUrl'] = vid_url
+        self.youtube_comments_body['context']['client']['mainAppWebInfo']['graftUrl'] = vid_url
+        self.youtube_comments_body['continuation'] = self.continuation_token
 
-            vid_url = f"https://www.youtube.com/watch?v={self.id}"
-            body_data['context']['client']['originalUrl'] = vid_url
-            body_data['context']['client']['mainAppWebInfo']['graftUrl'] = vid_url
-            body_data['continuation'] = self.continuation_token
+        r = requests.post(
+            'https://www.youtube.com/youtubei/v1/next', data=json.dumps(self.youtube_comments_body))
+        r_parse = json.loads(r.text)
 
-            r = requests.post(
-                'https://www.youtube.com/youtubei/v1/next', data=json.dumps(body_data))
+        chapter_data = []
+        comments = r_parse['onResponseReceivedEndpoints'][1]['reloadContinuationItemsCommand']['continuationItems']
+        # For each comment, extract the chapter data and if it is valid, add it to the list
+        for comment in comments:
+            isComment = comment.get('commentThreadRenderer')
+            if not isComment:
+                continue
 
-            r_parse = json.loads(r.text)
+            com_parts = isComment['comment']['commentRenderer']['contentText']['runs']
+            chapter_data = self.extract_chapter_comment_data(com_parts)
 
-            comments = (r_parse['onResponseReceivedEndpoints']
-            [1]['reloadContinuationItemsCommand']['continuationItems'])
-                        
-            for comment_index, comment in enumerate(comments):
-                isComment = comment.get('commentThreadRenderer')
-
-                if isComment:
-                    com_parts = isComment['comment']['commentRenderer']['contentText']['runs']
-                    chapter_data = self.extract_chapter_data(com_parts)
-
-                    if len(chapter_data) > 3:
-                        break
+            if len(chapter_data) > 3:
+                break
 
         return chapter_data
-
-    def format_line(self, lline: str) -> str:
-        for lpart in lline:
-            if lpart:
-                lpart = lpart.split('\n')[0].strip() if (lpart.split('\n')[0]) else lpart.split('\n')[1].strip()
-                part_len = len(lpart)
-
-                if re.search('[a-zA-Z]', lpart):
-
-                    start_index = 0
-                    while start_index < part_len and not lpart[start_index].isalpha():
-                        start_index += 1
-
-                    end_index = part_len - 1
-                    while end_index > start_index and not lpart[end_index].isalpha() and not lpart[
-                        end_index].isnumeric():
-                        end_index -= 1
-
-                    return lpart[start_index:end_index + 1]
 
 class s1():
     def __init__(self) -> None:
@@ -319,16 +341,28 @@ class s1():
         return return_value
 
     def get_chapter(self, id: str) -> list:
+        """ Get chapter data for a video
+
+        Args:
+            id (str): Video ID
+
+        Returns:
+            list: List of chapter data
+        """
 
         chapter_turtle = chapter_scrap(id)
+        chapter_data = []
 
-        base_logger.info(f"Trying to get chapter data for {id} from youtube data")
+        # Try to get chapter data from youtube embedded data
+        base_logger.info(f"Trying to get chapter data for {id} from youtube embedded data")
         chapter_data = chapter_turtle.by_youtube_data()
 
+        # If no chapter data is found, try to get chapter data from video description
         if not chapter_data:
             base_logger.info(f"Trying to get chapter data for {id} from description")
             chapter_data = chapter_turtle.by_video_desc()
 
+        # If no chapter data is found, try to get chapter data from video comments
         if not chapter_data:
             base_logger.info(f"Trying to get chapter data for {id} from comments")
             chapter_data = chapter_turtle.by_video_comments()
