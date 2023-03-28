@@ -1,6 +1,8 @@
 *.jpg
 *.m4a
 *.log
+*.log.*
 __pycache__
 audio
 bacchus
+docker/volumes

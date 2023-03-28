@@ -109,9 +109,19 @@ class chapter_scrap():
 
         return chapter_data
     
-    def extract_titles_and_timestamps_v2(self, json_data):
-        command_runs = json_data["attributedDescription"]["commandRuns"]
-        content = json_data["attributedDescription"]["content"]
+    def extract_titles_and_timestamps_v2(self, json_data: dict) -> list:
+        """ Extract titles and timestamps from json data of a youtube video
+
+        Args:
+            json_data (dict): json data of a youtube video
+
+        Returns:
+            list: List of titles and timestamps
+        """
+        
+        # Youtube json format can change at any time so this may break
+        command_runs = json_data["attributedDescription"]["commandRuns"] # List of youtube timestamps
+        content = json_data["attributedDescription"]["content"] # Full description string
         titles_and_timestamps = []
         last_timestamp = -1
 
@@ -120,6 +130,7 @@ class chapter_scrap():
             title_length = command_run["length"]
             title_end = title_start + title_length
             
+            # Find start and end of title
             prev_char = content[title_start - 1:title_start]
             while prev_char != "\n" and title_start > 0:
                 title_start -= 1
@@ -144,6 +155,7 @@ class chapter_scrap():
                 end_index -= 1
             title = title[start_index : end_index + 1]
             
+            # Get timestamp and add to list if it is greater than the last timestamp
             watchEndpoint = command_run["onTap"]["innertubeCommand"].get("watchEndpoint")
             if watchEndpoint:
                 timestamp = command_run["onTap"]["innertubeCommand"]["watchEndpoint"]["startTimeSeconds"]
