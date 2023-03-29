@@ -52,4 +52,5 @@ RUN pip install --no-cache-dir --upgrade -r /ares/requirements.txt
 
 COPY ./ares /ares
 
-CMD ["ddtrace-run", "uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload"]
+CMD ["uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload", "--workers", "6"]
+# CMD ["ddtrace-run", "uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload"]

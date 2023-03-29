@@ -430,62 +430,49 @@ class iris:
     
     # --------------------------------- Base data -------------------------------- #
     
-    def get_base_game_data(self, gameID: int, forceDB: bool) -> dict:
+    def get_game_base(self, gameID: int) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             
-            inCacheComplete = self.isGameCached(gameID)
-            if (inCacheComplete and inCacheComplete[0] and not forceDB):
-                rRes = self.rcli.json().get(f"g:{gameID}", "$.name", "$.slug", "$.complete", "$.parent_game", "$.category", "$.collection_id", "$.first_release_date", "$.rating", "$.popularity", "$.summary")
-                # logging.info(rRes)
-                return {key.split('.')[1]:next(iter(value), None) for key, value in rRes.items()}
-            else:
-                query = sql.SQL("SELECT name,slug,complete,parent_game,category,collection_id,first_release_date,rating,popularity,summary FROM iris.game WHERE id=%s;")
-                data = (gameID,)
-                curs.execute(query, data)
-                res = curs.fetchone()
-                column = ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
-                # res  = None
-                if (res) : return {column[i]:res[i] for i in range(10)}
-                else : return {}
+            query = sql.SQL("SELECT name,slug,complete,parent_game,category,collection_id,first_release_date,rating,popularity,summary FROM iris.game WHERE id=%s;")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchone()
+            column = ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
+            # res  = None
+            if (res) : return {column[i]:res[i] for i in range(10)}
+            else : return {}
         
     # ---------------------------- All media type data --------------------------- #
     
     def get_media_game_data(self, gameID, media_type) -> dict:
         
-        rRes = self.rcli.json().get(f"g:{gameID}", f"$.media.{media_type}")
-        if not rRes:
-            with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-                query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s AND type=%s;")
-                data = (gameID, media_type,)
-                curs.execute(query, data)
-                res = curs.fetchall()
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s AND type=%s;")
+            data = (gameID, media_type,)
+            curs.execute(query, data)
+            res = curs.fetchall()
 
-                return [row[0] for row in res]
-        else :
-            return rRes[0]
+            return [row[0] for row in res]
 
     # ------------------------------ Main album data ----------------------------- #
         
-    def get_album_game_data(self, gameID: int, forceDB: bool) -> dict:
+    def get_album_game_data(self, gameID: int) -> dict:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            if (cached_res := self.isMainAlbumCached(gameID)) and not forceDB:
-                return cached_res[0]
-            else :
-                query = sql.SQL("SELECT album.id, name, album.slug, track_id, title, track.slug, file, view_count, like_count, length FROM iris.album JOIN iris.track ON iris.album.track_id = iris.track.id WHERE iris.album.game_id = %s AND iris.album.name = 'Full Album'")
-                data = (gameID,)
-                curs.execute(query, data)
-                res = curs.fetchall()
-                if res:
-                    column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
-                    return {
-                        'id' : res[0][0],
-                        'name' : res[0][1],
-                        'slug' : res[0][2],
-                        'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
-                    }
-                else: return {}
+            query = sql.SQL("SELECT album.id, name, album.slug, track_id, title, track.slug, file, view_count, like_count, length FROM iris.album JOIN iris.track ON iris.album.track_id = iris.track.id WHERE iris.album.game_id = %s AND iris.album.name = 'Full Album'")
+            data = (gameID,)
+            curs.execute(query, data)
+            res = curs.fetchall()
+            if res:
+                column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
+                return {
+                    'id' : res[0][0],
+                    'name' : res[0][1],
+                    'slug' : res[0][2],
+                    'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
+                }
+            else: return {}
         
     # -------------------------- Involved companies data ------------------------- #
         
