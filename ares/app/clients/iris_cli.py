@@ -27,6 +27,7 @@ f = open('./app/json/category.json')
 SQL_category: dict = json.load(f)
 
 # -------------------- Create database cursor with logging ------------------- #
+from app.utils.loggers import base_logger
 from app.utils.loggers import get_database_logger
 sql_logger, LoggingCursor = get_database_logger()
 
@@ -55,6 +56,11 @@ GAMEID_TABLES = [
     "theme",
     "track"
 ]
+
+PRE_CALC_DATA = {
+    "base_columns": ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary'],
+    "track_columns": ['title', 'track_slug', 'file', 'view_count', 'like_count', 'length']
+}
 
 def image_downloader(IGDB_client, field, media):
     hash = media["image_id"]
@@ -431,26 +437,43 @@ class iris:
     # --------------------------------- Base data -------------------------------- #
     
     def get_game_base(self, gameID: int) -> dict:
+        """ Get game base data
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Game base data
+        """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             
-            query = sql.SQL("SELECT name,slug,complete,parent_game,category,collection_id,first_release_date,rating,popularity,summary FROM iris.game WHERE id=%s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL("select * from iris.get_game_info(%s)")
+            curs.execute(query, (gameID,))
             res = curs.fetchone()
-            column = ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary']
-            # res  = None
-            if (res) : return {column[i]:res[i] for i in range(10)}
-            else : return {}
+
+            if res: 
+                return {column:res[i] for i, column in enumerate(PRE_CALC_DATA['base_columns'])}
+            else: 
+                return {}
         
     # ---------------------------- All media type data --------------------------- #
     
     def get_media_game_data(self, gameID, media_type) -> dict:
+        """ Get all data from a media type of a game in the database
+
+        Args:
+            gameID (int): Game ID
+            media_type (str): Media type (screenshots, artwork, cover)
+
+        Returns:
+            dict: Media data
+        """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            
             query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s AND type=%s;")
-            data = (gameID, media_type,)
-            curs.execute(query, data)
+            curs.execute(query, (gameID, media_type,))
             res = curs.fetchall()
 
             return [row[0] for row in res]
@@ -458,21 +481,29 @@ class iris:
     # ------------------------------ Main album data ----------------------------- #
         
     def get_album_game_data(self, gameID: int) -> dict:
+        """ Get all data from the album of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Album data
+        """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT album.id, name, album.slug, track_id, title, track.slug, file, view_count, like_count, length FROM iris.album JOIN iris.track ON iris.album.track_id = iris.track.id WHERE iris.album.game_id = %s AND iris.album.name = 'Full Album'")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL("SELECT * FROM iris.get_album_tracks(%s)")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
+            
             if res:
-                column = ['','','','id', 'title', 'slug', 'file', 'view_count', 'like_count', 'length']
                 return {
                     'id' : res[0][0],
                     'name' : res[0][1],
                     'slug' : res[0][2],
-                    'track' : [{column[i]:row[i] for i in range(3,10)} for row in res]
+                    'track' : [{column: row[i+2] for i, column in enumerate(PRE_CALC_DATA['track_columns'])} for row in res]
                 }
-            else: return {}
+            else: 
+                return {}
         
     # -------------------------- Involved companies data ------------------------- #
         

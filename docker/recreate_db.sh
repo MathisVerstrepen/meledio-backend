@@ -17,7 +17,7 @@ BACKUP_FILE="db_save.dump"
 BACKUP_DIR="/home/mathis/dune/docker/backups"
 
 # Créer une sauvegarde de la base de données
-PGPASSWORD="3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF" pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -v > $BACKUP_DIR/$BACKUP_FILE
+PGPASSWORD="3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF" pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -Fc postgres -v > $BACKUP_DIR/$BACKUP_FILE
 
 
 # Arrêter le conteneur Docker
@@ -30,4 +30,4 @@ rm -rf /home/mathis/dune/docker/volumes/$VOLUME_NAME
 docker compose -f back-compose.yml up -d
 
 # Rétablir la base de données à partir de la sauvegarde
-docker exec -i iris psql -U postgres -h 127.0.0.1 < $BACKUP_DIR/$BACKUP_FILE
+# docker exec -i iris pg_restore -c -U postgres -h 127.0.0.1 -d postgres < $BACKUP_DIR/$BACKUP_FILE
