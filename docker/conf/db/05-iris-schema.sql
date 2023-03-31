@@ -279,6 +279,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
 /*
     Create a function to get all the basic information of a game
     --> SELECT * FROM iris.get_game_info(%s);
@@ -301,5 +302,31 @@ BEGIN
     RETURN QUERY SELECT g.name, g.slug, g.complete, g.parent_game, g.category, g.collection_id, g.first_release_date, g.rating, g.popularity, g.summary
         FROM iris.game g
         WHERE g.id = $1;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all information about a company of a game ID
+    --> SELECT * FROM iris.get_game_company(%s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_game_company(integer)
+RETURNS TABLE (
+    company_id int,
+    developer boolean,
+    porting boolean,
+    publisher boolean,
+    supporting boolean,
+    name text,
+    slug text,
+    description text,
+    logo_id text
+) AS $$
+BEGIN
+    RETURN QUERY SELECT i_c.company_id, i_c.developer, i_c.porting, i_c.publisher, i_c.supporting, c.name, c.slug, c.description, c.logo_id
+        FROM iris.involved_companies i_c
+        LEFT JOIN iris.company c ON c.id = i_c.company_id
+        WHERE i_c.game_id = $1;
 END;
 $$ LANGUAGE plpgsql;
