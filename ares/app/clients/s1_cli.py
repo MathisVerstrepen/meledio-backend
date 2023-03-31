@@ -9,7 +9,6 @@ import shutil
 import logging
 import pathlib
 import requests
-import psycopg2
 import numpy as np
 import yt_dlp
 from io import BytesIO
@@ -17,8 +16,6 @@ from pydub import AudioSegment
 from multiprocessing import Pool
 from concurrent.futures import ThreadPoolExecutor
 from scipy.io import wavfile
-from psycopg2 import sql
-import psycopg2.extensions
 
 from app.clients.iris_cli import iris
 Iris_client = iris()
@@ -276,15 +273,6 @@ class s1():
             ' game complete soundtrack',
             ' original game soundtrack',
         ]
-
-        try:
-            self.conn = psycopg2.connect(database="",
-                                        user="postgres",
-                                        password=os.environ['POSTGRES_PASSWORD'],
-                                        host="iris",
-                                        port="5432")
-        except:
-            self.conn = None
             
         with open('/ares/app/json/youtube_body.json', 'r') as f:
             self.youtube_body = json.load(f)
@@ -501,7 +489,7 @@ class s1():
         # Cut the audio file into 10 second chunks
         tasks = []
         # tracks_id = []
-        with ThreadPoolExecutor() as executor, self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+        with ThreadPoolExecutor() as executor:
             for i, chapter in enumerate(chapters):
                 start = chapter.get('corrected_timestamp', chapter['timestamp'])*1000
                 end = duration if i >= len(chapters) - 1 else chapters[i + 1].get('corrected_timestamp', chapters[i]['timestamp'])*1000
@@ -513,12 +501,6 @@ class s1():
                 
                 chapter['file'] = file_uuid
                 chapter['duration'] = end - start
-                
-                # query = sql.SQL("INSERT INTO iris.track (game_id, title, slug, file, view_count, like_count, length)"
-                #                 "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id;")
-                # data = (gameID, chapter['title'], slugify(chapter['title']), file_uuid, 0, 0, end - start)
-                # curs.execute(query, data)
-                # tracks_id.append(curs.fetchone()[0])
 
         # Wait for all tasks to complete
         for task in tasks:
@@ -526,20 +508,3 @@ class s1():
             
         # Add the track to the database album table
         Iris_client.push_chapters(gameID, chapters)
-        # with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-        #     query = sql.SQL("SELECT name FROM iris.game WHERE id = %s;")
-        #     curs.execute(query, (gameID,))
-        #     name = curs.fetchone()[0] + " - Full OST"
-        #     name_slug = slugify(name)
-            
-        #     query = sql.SQL("INSERT INTO iris.album (game_id, name, slug, is_main) VALUES (%s,%s,%s,%s) RETURNING id;")
-        #     data = (gameID, name, name_slug, 't')
-        #     curs.execute(query, data)
-        #     album_id = curs.fetchone()[0]
-            
-        #     for track_id in tracks_id:
-        #         query = sql.SQL("INSERT INTO iris.album_track (album_id, track_id) VALUES (%s,%s);")
-        #         data = (album_id, track_id)
-        #         curs.execute(query, data)
-                
-        # self.conn.commit()

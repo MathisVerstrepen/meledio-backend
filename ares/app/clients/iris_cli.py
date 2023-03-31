@@ -10,7 +10,6 @@ import threading
 import logging
 import logging.handlers
 import json
-import redis
 import requests
 from slugify import slugify
 from datetime import datetime
@@ -59,7 +58,8 @@ GAMEID_TABLES = [
 
 PRE_CALC_DATA = {
     "base_columns": ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary'],
-    "track_columns": ['title', 'track_slug', 'file', 'view_count', 'like_count', 'length']
+    "track_columns": ['title', 'track_slug', 'file', 'view_count', 'like_count', 'length'],
+    "company_columns": ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id']
 }
 
 def image_downloader(IGDB_client, field, media):
@@ -69,25 +69,12 @@ def image_downloader(IGDB_client, field, media):
         with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", "wb") as f:
             f.write(res)
 
+from app.utils.connection import IRIS_CONN, REDIS_GAMES
 
 class iris:
     def __init__(self):
-
-        self.rcli = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
-
-        try: 
-            self.conn = psycopg2.connect(
-                database="",
-                user="postgres",
-                password=os.getenv("POSTGRES_PASSWORD"),
-                host="iris",
-                port="5432",
-            )
-            self.IGDB_client = IGDB()
-        except Exception as e:
-            logging.error("Can't connect to DB")
-            logging.error(e)
-            self.conn = None
+        self.rcli = REDIS_GAMES
+        self.conn = IRIS_CONN
 
     def isGameInDatabase(self, curs, table, id):
         query = sql.SQL("SELECT complete FROM iris.{table} where id=%s;").format(
@@ -507,76 +494,123 @@ class iris:
         
     # -------------------------- Involved companies data ------------------------- #
         
-    def get_involved_companies_game_data(self, gameID) -> dict:
-        
+    def get_involved_companies_game_data(self, gameID: int) -> dict:
+        """ Get all data from the involved companies of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Involved companies data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT company_id, developer, porting, publisher, supporting, name, slug, description, logo_id FROM iris.involved_companies JOIN iris.company ON iris.involved_companies.company_id = iris.company.id WHERE iris.involved_companies.game_id = %s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL("SELECT * FROM iris.get_game_company(%s)")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
-            column = ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id']
-            
-            return [{column[i]:row[i] for i in range(9)} for row in res]
+
+            return [{column: row[i] for i, column in enumerate(PRE_CALC_DATA['company_columns'])} for row in res]
         
     # ---------------------------- All 'extra' content --------------------------- #
         
-    def get_extra_content_game_data(self, gameID, extra_type) -> dict:
-        
+    def get_extra_content_game_data(self, gameID: int, extra_type: str) -> dict:
+        """ Get all data from a extra content type of a game in the database
+
+        Args:
+            gameID (int): Game ID
+            extra_type (str): Extra content type (dlcs, expansions, expanded_games, similar_games, standalone_expansions)
+
+        Returns:
+            dict: Extra content data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT extra_id FROM iris.extra_content WHERE game_id=%s AND type=%s;")
-            data = (gameID, extra_type,)
-            curs.execute(query, data)
+            query = sql.SQL(
+                "SELECT extra_id FROM iris.extra_content WHERE game_id=%s AND type=%s;")
+            curs.execute(query, (gameID, extra_type,))
             res = curs.fetchall()
 
             return [row[0] for row in res]
         
     # -------------------------------- Genre data -------------------------------- #
         
-    def get_genre_game_data(self, gameID) -> dict:
-        
+    def get_genre_game_data(self, gameID: int) -> dict:
+        """ Get all data from the genres of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Genre data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT name,slug FROM iris.genre WHERE iris.genre.game_id = %s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL(
+                "SELECT name,slug FROM iris.genre WHERE iris.genre.game_id = %s;")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
             column = ['name', 'slug']
-            
+
             return [{column[i]:row[i] for i in range(2)} for row in res]
         
     # -------------------------------- Theme data -------------------------------- #
         
-    def get_theme_game_data(self, gameID) -> dict:
-        
+    def get_theme_game_data(self, gameID: int) -> dict:
+        """ Get all data from the themes of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Theme data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT name,slug FROM iris.theme WHERE iris.theme.game_id = %s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL(
+                "SELECT name,slug FROM iris.theme WHERE iris.theme.game_id = %s;")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
             column = ['name', 'slug']
-            
+
             return [{column[i]:row[i] for i in range(2)} for row in res]
-        
+
     # ------------------------------- Keywords data ------------------------------ #
-        
-    def get_keyword_game_data(self, gameID) -> dict:
-        
+
+    def get_keyword_game_data(self, gameID: int) -> dict:
+        """ Get all data from the keywords of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Keyword data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT id,name,slug FROM iris.keyword WHERE iris.keyword.game_id = %s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL(
+                "SELECT id,name,slug FROM iris.keyword WHERE iris.keyword.game_id = %s;")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
             column = ['id', 'name', 'slug']
-            
+
             return [{column[i]:row[i] for i in range(3)} for row in res]
-    
+
     # -------------------------- Alternative names data -------------------------- #
-        
-    def get_alternative_name_game_data(self, gameID) -> dict:
-        
+
+    def get_alternative_name_game_data(self, gameID: int) -> dict:
+        """ Get all data from the alternative names of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            dict: Alternative name data
+        """
+
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT * FROM iris.alternative_name WHERE game_id=%s;")
-            data = (gameID,)
-            curs.execute(query, data)
+            query = sql.SQL(
+                "SELECT * FROM iris.alternative_name WHERE game_id=%s;")
+            curs.execute(query, (gameID,))
             res = curs.fetchall()
             column = ['id', 'game_id', 'name', 'comment']
 
@@ -584,16 +618,7 @@ class iris:
 
 class iris_user:
     def __init__(self):
-        try:
-            self.conn = psycopg2.connect(
-                database="",
-                user="postgres",
-                password=os.environ["POSTGRES_PASSWORD"],
-                host="iris",
-                port="5432",
-            )
-        except:
-            self.conn = None
+        self.conn = IRIS_CONN
 
     def get_user_exist(self, userID: str) -> bool:
 

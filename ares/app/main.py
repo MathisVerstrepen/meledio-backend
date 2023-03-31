@@ -1,21 +1,17 @@
 # type: ignore
 
-from fastapi import FastAPI, Depends, Request, Path, Query
+from fastapi import FastAPI
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import os
-import redis
 import json
 import time
-from timeit import default_timer as timer
-
 from app.clients.igdb_cli import IGDB
 from app.clients.iris_cli import iris, iris_user
 from app.clients.s1_cli import s1
-from app.utils.errors import raiseNoGameFound, raiseNoChapterFound, raiseNoUserFound, raiseAuthFailed
+from app.utils.errors import raiseNoUserFound
 from app.utils.loggers import base_logger
 
 from dotenv import load_dotenv
@@ -34,9 +30,7 @@ from app.routers import v1_public
 ares.include_router(v1_public.router)
 
 # Init Redis connections
-r_glob = redis.Redis(host="atlas", port=6379, db=1, password=os.getenv("REDIS_SECRET"))
-r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
-r_users = redis.Redis(host="atlas", port=6379, db=2, password=os.getenv("REDIS_SECRET"))
+from app.utils.connection import REDIS_USERS
 
 # Init API clients
 IGDB_cli = IGDB()
@@ -75,7 +69,7 @@ async def add_new_user_redis(userData: object) -> None:
     exist = iris_user_cli.get_user_exist(userData["id"])
 
     if exist:
-        r_users.json().set(userData["id"], "$", userData)
+        REDIS_USERS.json().set(userData["id"], "$", userData)
     else:
         raiseNoUserFound(userData["id"])
 
@@ -91,7 +85,7 @@ def get_user_redis(data: object) -> None:
     exist = iris_user_cli.get_user_exist(data["id"])
 
     if exist:
-        r_res = r_users.json().get(data["id"], f"${elements}")
+        r_res = REDIS_USERS.json().get(data["id"], f"${elements}")
         res = {elements[i]: r_res[i] for i in range(len(r_res))}
 
     else:

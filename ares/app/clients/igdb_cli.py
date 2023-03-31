@@ -4,9 +4,10 @@
 from fuzzywuzzy import fuzz
 from rich import print
 import requests
-import redis
 import json
 import os
+
+from app.utils.connection import REDIS_GLOBAL
 
 def get_igdb_token(r):
     token = r.json().get('IGDB_TOKEN', "$.access_token")
@@ -50,8 +51,7 @@ class IGDB():
     """IGDB related functions"""
     
     def __init__(self):
-        r_glob = redis.Redis(host="atlas", port=6379, db=1, password=os.getenv("REDIS_SECRET"))
-        self.TOKEN = get_igdb_token(r_glob)
+        self.TOKEN = get_igdb_token(REDIS_GLOBAL)
         self.req_header = {
             'Accept': 'application/json',
             'Client-ID': os.getenv('IGDB_ID'),
