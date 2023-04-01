@@ -2,10 +2,7 @@
 # type: ignore
 
 from app.clients.igdb_cli import IGDB
-import psycopg2
-import psycopg2.extensions
 from psycopg2 import sql
-import os
 import threading
 import logging
 import logging.handlers
@@ -13,6 +10,7 @@ import json
 import requests
 from slugify import slugify
 from datetime import datetime
+from timeit import default_timer as timer
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -75,6 +73,7 @@ class iris:
     def __init__(self):
         self.rcli = REDIS_GAMES
         self.conn = IRIS_CONN
+        self.IGDB_cli = IGDB()
 
     def isGameInDatabase(self, curs, table, id):
         query = sql.SQL("SELECT complete FROM iris.{table} where id=%s;").format(
@@ -121,53 +120,6 @@ class iris:
         
         self.conn.commit()
 
-    def getRandomCompleteGameIDs(self, number: int):
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT id FROM iris.game WHERE complete = true ORDER BY random() LIMIT %s;")
-            curs.execute(query, (number,))
-            return curs.fetchall()
-        
-    def getTopRatedGameIDs(self, number: int):
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT id FROM iris.game WHERE complete = true AND rating IS NOT NULL ORDER BY rating desc LIMIT %s;")
-            curs.execute(query, (number,))
-            return curs.fetchall()
-        
-    def getTopRatedCollectionIDs(self, number: int):
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("""SELECT iris.game.id, iris.game.collection_id, a.name
-                                FROM iris.game
-                                JOIN (SELECT collection.id, collection.name, AVG(rating) AS avgRating
-                                        FROM iris.collection
-                                        JOIN iris.game g ON collection.id = g.collection_id
-                                        WHERE complete
-                                        GROUP BY collection.id
-                                        HAVING AVG(rating) IS NOT NULL
-                                        AND COUNT(*) > 1
-                                        LIMIT %s) a ON a.id = game.collection_id
-                                ORDER BY a.avgRating DESC;""")
-            curs.execute(query, (number,))
-            return curs.fetchall()
-        
-    def getCollectionData(self, collectionID: int):
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("""SELECT name, slug
-                                FROM iris.collection
-                                WHERE collection.id = %s;""")
-            curs.execute(query, (collectionID,))
-            
-            return curs.fetchone()
-        
-    def getGameIDofCollection(self, collectionID: int):
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("""SELECT iris.game.id
-                                FROM iris.game
-                                WHERE collection_id = %s
-                                ORDER BY first_release_date DESC;""")
-            curs.execute(query, (collectionID,))
-            
-            return curs.fetchall()
-        
     def searchGameByName(self, searchText : str) :
         req = f"({searchText})|({searchText.strip()}*)|({searchText.strip()})"
         returnVal = []
@@ -309,7 +261,7 @@ class iris:
                     elif field_type == 'company':
                         
                         logging.info(field_data)
-                        company_data: list = self.IGDB_client.companies(field_data)
+                        company_data: list = self.IGDB_cli.companies(field_data)
                         logging.info(company_data)
                         logging.info(field)
                         for company in company_data:
@@ -356,7 +308,7 @@ class iris:
                             )
                             curs.execute(query, data)
                             
-                            thread = threading.Thread(target=image_downloader, args=(self.IGDB_client, field, media))
+                            thread = threading.Thread(target=image_downloader, args=(self.IGDB_cli, field, media))
                             thread.start()
                         
                         if isinstance(field_data, list):
@@ -421,6 +373,52 @@ class iris:
     #                                 GET GAME DATA                                #
     # ---------------------------------------------------------------------------- #
     
+    # --------------------------------- Full Wrapper -------------------------------- #
+    
+    async def get_game(self, gameID: int, labels: list[str] = ['base'], debug: bool = False) -> dict:
+        """ Wrapper for all the get_game_* functions, allow to get specific data from a game
+
+        Args:
+            gameID (int): Game ID
+            labels (list[str], optional): List of labels to filter by. Defaults to ['base'].
+            debug (bool, optional): Specify if performance debug mode is active. Defaults to False.
+
+        Returns:
+            dict: Dictionary with the wanted data
+        """
+        
+        game_data = {}
+        debug_data = {}
+
+        for label in labels:
+            start = timer()
+            match label:
+                case 'base':
+                    res = self.get_game_base(gameID)
+                case 'artworks' | 'cover' | 'screenshots':
+                    res = self.get_game_media(gameID, label)
+                case 'alternative_name':
+                    res = self.get_game_alternative_name(gameID)
+                case 'album':
+                    res = self.get_game_album(gameID)
+                case 'involved_companies':
+                    res = self.get_game_involved_companies(gameID)
+                case 'dlcs' | 'expansions' | 'expanded_games' | 'similar_games' | 'standalone_expansions':
+                    res = self.get_game_extra_content(gameID, label)
+                case 'genre':
+                    res = self.get_game_genre(gameID)
+                case 'theme':
+                    res = self.get_game_theme(gameID)
+                case 'keyword':
+                    res = self.get_game_keyword(gameID)
+                case _:
+                    continue
+            game_data[label] = res
+            end = timer()
+            if debug: debug_data[label] = (end - start) * 1000
+
+        return {"debug_data": debug_data, "gameID": gameID, "data": game_data}
+    
     # --------------------------------- Base data -------------------------------- #
     
     def get_game_base(self, gameID: int) -> dict:
@@ -446,7 +444,7 @@ class iris:
         
     # ---------------------------- All media type data --------------------------- #
     
-    def get_media_game_data(self, gameID, media_type) -> dict:
+    def get_game_media(self, gameID, media_type) -> dict:
         """ Get all data from a media type of a game in the database
 
         Args:
@@ -467,7 +465,7 @@ class iris:
 
     # ------------------------------ Main album data ----------------------------- #
         
-    def get_album_game_data(self, gameID: int) -> dict:
+    def get_game_album(self, gameID: int) -> dict:
         """ Get all data from the album of a game in the database
 
         Args:
@@ -494,7 +492,7 @@ class iris:
         
     # -------------------------- Involved companies data ------------------------- #
         
-    def get_involved_companies_game_data(self, gameID: int) -> dict:
+    def get_game_involved_companies(self, gameID: int) -> dict:
         """ Get all data from the involved companies of a game in the database
 
         Args:
@@ -513,7 +511,7 @@ class iris:
         
     # ---------------------------- All 'extra' content --------------------------- #
         
-    def get_extra_content_game_data(self, gameID: int, extra_type: str) -> dict:
+    def get_game_extra_content(self, gameID: int, extra_type: str) -> dict:
         """ Get all data from a extra content type of a game in the database
 
         Args:
@@ -534,7 +532,7 @@ class iris:
         
     # -------------------------------- Genre data -------------------------------- #
         
-    def get_genre_game_data(self, gameID: int) -> dict:
+    def get_game_genre(self, gameID: int) -> dict:
         """ Get all data from the genres of a game in the database
 
         Args:
@@ -555,7 +553,7 @@ class iris:
         
     # -------------------------------- Theme data -------------------------------- #
         
-    def get_theme_game_data(self, gameID: int) -> dict:
+    def get_game_theme(self, gameID: int) -> dict:
         """ Get all data from the themes of a game in the database
 
         Args:
@@ -576,7 +574,7 @@ class iris:
 
     # ------------------------------- Keywords data ------------------------------ #
 
-    def get_keyword_game_data(self, gameID: int) -> dict:
+    def get_game_keyword(self, gameID: int) -> dict:
         """ Get all data from the keywords of a game in the database
 
         Args:
@@ -597,7 +595,7 @@ class iris:
 
     # -------------------------- Alternative names data -------------------------- #
 
-    def get_alternative_name_game_data(self, gameID: int) -> dict:
+    def get_game_alternative_name(self, gameID: int) -> dict:
         """ Get all data from the alternative names of a game in the database
 
         Args:
@@ -615,6 +613,135 @@ class iris:
             column = ['id', 'game_id', 'name', 'comment']
 
             return [{column[i]:row[i] for i in range(4)} for row in res]
+
+    
+    # ---------------------------------------------------------------------------- #
+    #                               GET GAME FUNCTIONS                             #
+    # ---------------------------------------------------------------------------- #
+    
+    # ------------------------------- Random Games ------------------------------- #
+    
+    async def get_random_games(self, number: int, labels: list[str], debug: bool) -> list:
+        """ Get a specified number of random games from the database that are complete
+
+        Args:
+            number (int): Number of games to get
+            labels (list[str]): List of labels to filter by
+            debug (bool): Debug mode
+
+        Returns:
+            list: List of random games data
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id FROM iris.game WHERE complete ORDER BY random() LIMIT %s;")
+            curs.execute(query, (number,))
+            random_games_id = curs.fetchall()
+            for random_game_id in random_games_id:
+                game = await self.get_game(random_game_id[0], labels, debug)
+                if game:
+                    yield game
+                    
+    # ----------------------------- Top Rated Games ----------------------------- #
+
+    async def get_top_rated_games(self, number: int, labels: list[str], debug: bool) -> list:
+        """ Get a specified number of top rated games from the database that are complete
+
+        Args:
+            number (int): Number of games to get
+            labels (list[str]): List of labels to filter by
+            debug (bool): Debug mode
+
+        Returns:
+            list: List of top rated games data
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id FROM iris.game WHERE complete AND rating IS NOT NULL ORDER BY rating desc LIMIT %s;")
+            curs.execute(query, (number,))
+            top_rated_games_id = curs.fetchall()
+            for top_rated_game_id in top_rated_games_id:
+                game = await self.get_game(top_rated_game_id[0], labels, debug)
+                if game:
+                    yield game
+                    
+    # ----------------------------- Get Collection ------------------------------ #
+       
+    async def get_collection(self, collectionID: int, labels: list[str], debug: bool) -> dict:
+        """ Get a collection of games from the database
+
+        Args:
+            collectionID (int): Collection ID
+            labels (list[str]): List of labels to filter by
+            debug (bool): Debug mode
+
+        Returns:
+            list: Dictionary of collection data and games data
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_collection_info(%s)")
+            curs.execute(query, (collectionID,))
+            collection_games_id = curs.fetchall()
+
+            # Create collection data
+            collection = {
+                "collection": {
+                    "name": collection_games_id[0][1],
+                    "slug": collection_games_id[0][2]
+                },
+                "games": []
+            }
+
+            # Get and add games data to collection
+            for collection_game_id in collection_games_id:
+                game = await self.get_game(collection_game_id[0], labels, debug)
+                if game:
+                    collection["games"].append(game)
+
+            return collection
+
+    # --------------------------- Top Rated Collection -------------------------- #
+
+    async def get_top_rated_collection(self, number: int, debug: bool) -> list:
+        """ Get a specified number of top rated collections from the database
+
+        Args:
+            number (int): Number of collections to get
+            debug (bool): Debug mode
+
+        Returns:
+            list: List of top rated collections data
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            start = timer()
+            query = sql.SQL("SELECT * FROM iris.get_top_collections(%s);")
+            curs.execute(query, (number,))
+            top_rated_collections = curs.fetchall()
+            base_logger.info(top_rated_collections)
+
+            # Parse top rated collections
+            parse_top_rated_collections = {}
+            last_collection_id = -1
+            for top_rated_collection in top_rated_collections:
+                if last_collection_id != top_rated_collection[0]:
+                    parse_top_rated_collections[top_rated_collection[0]] = {
+                        "collection": {
+                            "name": top_rated_collection[1],
+                            "slug": top_rated_collection[2]
+                        },
+                        "games": []
+                    }
+                    last_collection_id = top_rated_collection[0]
+                parse_top_rated_collections[top_rated_collection[0]]["games"].append({
+                    "id": top_rated_collection[3],
+                    "name": top_rated_collection[4],
+                    "cover": top_rated_collection[5],
+                })
+                
+            end = timer()
+            return parse_top_rated_collections, (end - start) * 1000
 
 class iris_user:
     def __init__(self):

@@ -36,6 +36,9 @@ ALTER TABLE iris.game ADD FOREIGN KEY ("parent_game") REFERENCES iris.game ("id"
 ALTER TABLE iris.game ADD FOREIGN KEY ("collection_id") REFERENCES iris.collection ("id");
 ALTER TABLE iris.game ADD FOREIGN KEY ("category") REFERENCES iris.category ("id");
 
+CREATE EXTENSION pg_trgm;
+CREATE INDEX game_name_trgm_idx ON iris.game USING gin (name gin_trgm_ops);
+
 -- ----------extra_content(DLCS, EXPANDED GAMES, EXPANSIONS, SIMILAR GAMES, STANDALONE EXPANSIONS)---------- --
 
 CREATE TABLE iris.extra_content (
@@ -328,5 +331,54 @@ BEGIN
         FROM iris.involved_companies i_c
         LEFT JOIN iris.company c ON c.id = i_c.company_id
         WHERE i_c.game_id = $1;
+END;
+$$ LANGUAGE plpgsql;
+
+/*
+    Create a function to get information about a collection
+    --> SELECT * FROM iris.get_collection_info(%s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_collection_info(integer)
+RETURNS TABLE (
+    game_id int,
+    collection_name text,
+    collection_slug text
+) AS $$
+BEGIN
+    RETURN QUERY SELECT g.id, c.name, c.slug
+        FROM iris.game g
+        LEFT JOIN iris.collection c ON g.collection_id = c.id
+        WHERE g.collection_id = $1;
+END;
+$$ LANGUAGE plpgsql;
+
+/*
+    Create a function to get a number of top rated collection and basic information about them
+    --> SELECT * FROM iris.get_top_collections(%s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_top_collections(integer)
+RETURNS TABLE (
+    collection_id int,
+    collection_name text,
+    collection_slug text,
+    game_id int,
+    game_name text,
+    image_id text
+) AS $$
+BEGIN
+    RETURN QUERY SELECT g.collection_id, c.name, c.slug, g.id, g.name, m.image_id
+        FROM iris.game g
+        JOIN (SELECT c.id, c.name, c.slug
+                FROM iris.collection c
+                JOIN iris.game g ON c.id = g.collection_id
+                WHERE complete
+                GROUP BY c.id
+                HAVING AVG(rating) IS NOT null AND COUNT(*) > 2
+                ORDER BY AVG(rating) DESC
+                LIMIT $1) c ON c.id = g.collection_id
+        JOIN iris.media m on g.id = m.game_id
+        WHERE m."type" = 'cover';
 END;
 $$ LANGUAGE plpgsql;
