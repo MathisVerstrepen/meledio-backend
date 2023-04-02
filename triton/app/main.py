@@ -8,7 +8,15 @@ import os
 import pathlib
 import redis
 from ddtrace import patch
-
+import psycopg2
+import uuid
+IRIS_CONN = psycopg2.connect(
+    database="",
+    user="postgres",
+    password="3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF",
+    host="iris",
+    port="5432",
+)
 
 
 class ConnectionManager:
@@ -41,7 +49,7 @@ logging.basicConfig(
     format="%(asctime)s -- %(levelname)s -- %(message)s",
 )
 
-patch(fastapi=True)
+# patch(fastapi=True)
 triton = FastAPI()
 
 
@@ -114,8 +122,17 @@ async def websocket_endpoint(websocket: WebSocket):
             audioID = messData['id']
             
             if (messData['chunk'] == 0):
-                trackChunksMetadata = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta")[0]
-                audioLength = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].length")[0]
+                # trackChunksMetadata = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta")[0]
+                # audioLength = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].length")[0]
+                
+                with IRIS_CONN.cursor() as cursor:
+                    cursor.execute("SELECT length FROM iris.track WHERE file = %s", (audioID,))
+                    audioLength = cursor.fetchone()[0]
+                    trackChunksMetadata = []
+                    for i in range(0, audioLength, 10000):
+                        trackChunksMetadata.append(i)
+                    logging.debug(audioLength)
+                    logging.debug(trackChunksMetadata)
 
                 trackSessionData = {
                     "base" : message,
@@ -126,10 +143,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 await manager.send_personal_message(json.dumps(trackSessionData), websocket)
                 
+                audioID = uuid.UUID(audioID).hex
                 audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/0").read_bytes()
                 await manager.send_personal_message(audio_bytes, websocket)
                 
             else :
+                audioID = uuid.UUID(audioID).hex
                 audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{messData['chunk']}").read_bytes()
                 # b = str(messData['chunk']).encode('utf-8')
                 # logging.debug(audio_bytes)

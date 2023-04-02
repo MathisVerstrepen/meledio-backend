@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir --upgrade -r /triton/requirements.txt
 
 COPY ./triton /triton
 
-CMD ["ddtrace-run", "uvicorn", "app.main:triton", "--proxy-headers", "--host", "0.0.0.0", "--port", "5110", "--reload"]
+CMD ["uvicorn", "app.main:triton", "--proxy-headers", "--host", "0.0.0.0", "--port", "5110", "--reload"]
