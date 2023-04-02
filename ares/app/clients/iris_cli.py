@@ -703,7 +703,7 @@ class iris:
 
     # --------------------------- Top Rated Collection -------------------------- #
 
-    async def get_top_rated_collection(self, number: int, debug: bool) -> list:
+    async def get_top_rated_collection(self, number: int) -> list:
         """ Get a specified number of top rated collections from the database
 
         Args:
@@ -739,9 +739,36 @@ class iris:
                     "name": top_rated_collection[4],
                     "cover": top_rated_collection[5],
                 })
-                
+
             end = timer()
             return parse_top_rated_collections, (end - start) * 1000
+        
+    # --------------------------- Search By Name -------------------------- #
+    
+    async def search_by_name(self, name: str, number: int) -> list:
+        """ Search for a game by name
+
+        Args:
+            name (str): Name to search for
+            number (int): Number of results to get
+
+        Returns:
+            list: List of search results
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.search_game_by_name(%s, %s);")
+            curs.execute(query, (name, number))
+            search_results = curs.fetchall()
+            for search_result in search_results:
+                yield {
+                    "similarity": search_result[0],
+                    "id": search_result[1],
+                    "name": search_result[2],
+                    "slug": search_result[3],
+                    "complete": search_result[4],
+                    "cover": search_result[5],
+                }
 
 class iris_user:
     def __init__(self):

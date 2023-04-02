@@ -36,9 +36,6 @@ ALTER TABLE iris.game ADD FOREIGN KEY ("parent_game") REFERENCES iris.game ("id"
 ALTER TABLE iris.game ADD FOREIGN KEY ("collection_id") REFERENCES iris.collection ("id");
 ALTER TABLE iris.game ADD FOREIGN KEY ("category") REFERENCES iris.category ("id");
 
-CREATE EXTENSION pg_trgm;
-CREATE INDEX game_name_trgm_idx ON iris.game USING gin (name gin_trgm_ops);
-
 -- ----------extra_content(DLCS, EXPANDED GAMES, EXPANSIONS, SIMILAR GAMES, STANDALONE EXPANSIONS)---------- --
 
 CREATE TABLE iris.extra_content (
@@ -380,5 +377,32 @@ BEGIN
                 LIMIT $1) c ON c.id = g.collection_id
         JOIN iris.media m on g.id = m.game_id
         WHERE m."type" = 'cover';
+END;
+$$ LANGUAGE plpgsql;
+
+/*
+    Create a function to search for a game by name
+    --> SELECT * FROM iris.search_game_by_name(%s, %s);
+*/
+
+CREATE index if not exists game_name_trgm_idx ON iris.game USING gin (name gin_trgm_ops);
+DROP FUNCTION iris.search_game_by_name(text,integer) ;
+
+CREATE OR REPLACE FUNCTION iris.search_game_by_name(text, int)
+RETURNS TABLE (
+    similarity real,
+    game_id int,
+    game_name text,
+    game_slug text,
+    game_complete boolean,
+    cover_id text
+) AS $$
+BEGIN
+    RETURN QUERY SELECT similarity(g.name, concat('%', $1, '%')), g.id, g.name, g.slug, g.complete, m.image_id
+        FROM iris.game g
+        left JOIN (select m.game_id, m.image_id from iris.media m where m."type" = 'cover') m ON g.id = m.game_id
+        WHERE g.name ILIKE concat('%', $1, '%')
+        ORDER BY similarity DESC
+        LIMIT $2;
 END;
 $$ LANGUAGE plpgsql;
