@@ -448,11 +448,21 @@ class s1():
             end (int): End timecode
         """
         
-        # Cut the audio file into 10 second chunks
+        # Cut the first audio segment
         currentTimecode = start
-        while currentTimecode < end - 10 * 1000:
-            currentTimecodeDelay = currentTimecode if currentTimecode == 0 else currentTimecode - 100
-            cutAudio = audio[currentTimecodeDelay:currentTimecode + (10 * 1000 + 100)]
+        
+        cutAudio = audio[currentTimecode:currentTimecode + (10 * 1000 + 100)]
+        wavIO = BytesIO()
+        cutAudio.export(wavIO, format="mp3")
+        pathlib.Path(f"/bacchus/audio/{gameID}/{file_uuid}/{int(currentTimecode - start)}").write_bytes(wavIO.getbuffer())
+
+        currentTimecode += 10 * 1000
+        
+        # Cut the middle audio segments
+        while currentTimecode + (10 * 1000 + 100) < end:
+            cutAudio = audio[currentTimecode - 100:currentTimecode + (10 * 1000 + 100)]
+            
+            base_logger.info(f"Cutting audio file {currentTimecode - 100} to {currentTimecode + (10 * 1000 + 100)}")
 
             wavIO = BytesIO()
             cutAudio.export(wavIO, format="mp3")
@@ -464,6 +474,7 @@ class s1():
         cutAudio = audio[currentTimecode - 100:end]
         wavIO = BytesIO()
         cutAudio.export(wavIO, format="mp3")
+        pathlib.Path(f"/bacchus/audio/{gameID}/{file_uuid}/{int(currentTimecode - start)}").write_bytes(wavIO.getbuffer())
     
     def full_audio_format(self, gameID: int, chapters: list) -> None:
         """ Format the full audio file into 10 second chunks
@@ -493,6 +504,7 @@ class s1():
             for i, chapter in enumerate(chapters):
                 start = chapter.get('corrected_timestamp', chapter['timestamp'])*1000
                 end = duration if i >= len(chapters) - 1 else chapters[i + 1].get('corrected_timestamp', chapters[i]['timestamp'])*1000
+                base_logger.info(f"Cutting audio segment {i} from {start} to {end}")
                 file_uuid = uuid.uuid4().hex
                 os.mkdir(f"/bacchus/audio/{gameID}/{file_uuid}")
                 

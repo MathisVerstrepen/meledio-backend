@@ -1,4 +1,5 @@
 from fastapi import Body, FastAPI, Path, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from os.path import exists
 import glob
@@ -7,9 +8,11 @@ import logging
 import os
 import pathlib
 import redis
-from ddtrace import patch
 import psycopg2
 import uuid
+import threading
+
+
 IRIS_CONN = psycopg2.connect(
     database="",
     user="postgres",
@@ -51,6 +54,14 @@ logging.basicConfig(
 
 # patch(fastapi=True)
 triton = FastAPI()
+origins = ["*"]
+triton.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # triton.add_middleware(TraceMiddleware)
@@ -67,6 +78,11 @@ validation_qual = {
     'huge': 'h',
     'small': 's'
 }
+
+def increment_listen_count(fileID):
+    with IRIS_CONN.cursor() as cursor:
+        cursor.execute("UPDATE iris.track SET view_count = view_count + 1 WHERE file = %s", (fileID,))
+        IRIS_CONN.commit()
 
 
 @triton.get("/media/{cat}/{qual}/{hash}")
@@ -117,52 +133,37 @@ async def websocket_endpoint(websocket: WebSocket):
             message = await websocket.receive_text()
             messData = json.loads(message)
             logging.debug(message)
-            gameID = messData['gid']
-            audioIndex = messData['audIdx']
-            audioID = messData['id']
             
-            if (messData['chunk'] == 0):
-                # trackChunksMetadata = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].chunkMeta")[0]
-                # audioLength = r_games.json().get(f"g:{gameID}", f"$.album[0].track[{audioIndex}].length")[0]
-                
+            message_type = messData['type']
+            fileID = messData['file']
+            
+            if (message_type == "init"):
                 with IRIS_CONN.cursor() as cursor:
-                    cursor.execute("SELECT length FROM iris.track WHERE file = %s", (audioID,))
+                    cursor.execute("SELECT length FROM iris.track WHERE file = %s", (fileID,))
                     audioLength = cursor.fetchone()[0]
-                    trackChunksMetadata = []
-                    for i in range(0, audioLength, 10000):
-                        trackChunksMetadata.append(i)
                     logging.debug(audioLength)
-                    logging.debug(trackChunksMetadata)
 
                 trackSessionData = {
-                    "base" : message,
-                    "chunk" : -1,
-                    "chunkMeta" : trackChunksMetadata,
+                    "type" : "init",
+                    "nchunk" : audioLength // 10000 + 1,
+                    "chunkLength" : 10,
                     "audioLength" : audioLength
                 }
                 
                 await manager.send_personal_message(json.dumps(trackSessionData), websocket)
+            elif (message_type == "chunk"):
+                gameID = messData['game']
+                chunkIdx = messData['chunk']
                 
-                audioID = uuid.UUID(audioID).hex
-                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/0").read_bytes()
-                await manager.send_personal_message(audio_bytes, websocket)
+                if chunkIdx == 20000: 
+                        threading.Thread(target=increment_listen_count, args=(fileID,)).start()
+
                 
-            else :
-                audioID = uuid.UUID(audioID).hex
-                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{messData['chunk']}").read_bytes()
-                # b = str(messData['chunk']).encode('utf-8')
-                # logging.debug(audio_bytes)
-                # logging.debug(b)
-                # logging.debug(b+audio_bytes)
-                # sendData = {
-                #     "chunk" : messData['chunk'],
-                #     'bytes' : str(audio_bytes, 'latin-1')
-                # }
-                await manager.send_personal_message(audio_bytes, websocket)
-            
-            # audio_bytes = pathlib.Path(f"/bacchus/audio/1942/{audioID}/0").read_bytes()
-            
-                # await manager.send_personal_message(audio_bytes, websocket)
+                audioID = uuid.UUID(fileID).hex
+                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{chunkIdx}").read_bytes()
+                chunk_id_bytes = messData['chunk'].to_bytes(4, byteorder='big')
+                message = chunk_id_bytes +  audio_bytes
+                await manager.send_personal_message(message, websocket)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

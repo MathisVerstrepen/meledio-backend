@@ -1,5 +1,6 @@
 CREATE SCHEMA IF NOT EXISTS iris AUTHORIZATION supabase_admin;
 GRANT USAGE ON SCHEMA iris TO postgres;
+CREATE EXTENSION pg_trgm;
 
 -- --------------------collection-------------------- --
 
@@ -120,7 +121,8 @@ CREATE TABLE iris.media (
     "game_id" int,
     "type" text,
     "height" int,
-    "width" int
+    "width" int,
+    "blur_hash" text
 );
 
 ALTER TABLE iris.media ADD FOREIGN KEY ("game_id") REFERENCES iris.game ("id");
@@ -291,16 +293,19 @@ RETURNS TABLE (
     slug text,
     complete boolean,
     parent_game int,
-    category int,
+    category text,
     collection_id int,
     first_release_date date,
     rating double precision,
     popularity int,
-    summary text
+    summary text,
+    n_tracks bigint
 ) AS $$
 BEGIN
-    RETURN QUERY SELECT g.name, g.slug, g.complete, g.parent_game, g.category, g.collection_id, g.first_release_date, g.rating, g.popularity, g.summary
+    RETURN QUERY SELECT g.name, g.slug, g.complete, g.parent_game, c.name, g.collection_id, g.first_release_date, g.rating, g.popularity, g.summary, 
+        (SELECT COUNT(t.id) FROM iris.track t LEFT JOIN iris.album_track a_t ON t.id = a_t.track_id LEFT JOIN iris.album a ON a_t.album_id = a.id WHERE a.game_id = g.id AND a.is_main)
         FROM iris.game g
+        LEFT JOIN iris.category c ON c.id = g.category
         WHERE g.id = $1;
 END;
 $$ LANGUAGE plpgsql;
@@ -355,17 +360,18 @@ $$ LANGUAGE plpgsql;
     --> SELECT * FROM iris.get_top_collections(%s);
 */
 
-CREATE OR REPLACE FUNCTION iris.get_top_collections(integer)
+CREATE OR REPLACE FUNCTION iris.get_top_collections(integer, integer)
 RETURNS TABLE (
     collection_id int,
     collection_name text,
     collection_slug text,
     game_id int,
     game_name text,
-    image_id text
+    image_id text,
+    blur_hash text
 ) AS $$
 BEGIN
-    RETURN QUERY SELECT g.collection_id, c.name, c.slug, g.id, g.name, m.image_id
+    RETURN QUERY SELECT g.collection_id, c.name, c.slug, g.id, g.name, m.image_id, m.blur_hash
         FROM iris.game g
         JOIN (SELECT c.id, c.name, c.slug
                 FROM iris.collection c
@@ -374,7 +380,7 @@ BEGIN
                 GROUP BY c.id
                 HAVING AVG(rating) IS NOT null AND COUNT(*) > 2
                 ORDER BY AVG(rating) DESC
-                LIMIT $1) c ON c.id = g.collection_id
+                LIMIT $1 OFFSET $2) c ON c.id = g.collection_id
         JOIN iris.media m on g.id = m.game_id
         WHERE m."type" = 'cover';
 END;
@@ -386,7 +392,7 @@ $$ LANGUAGE plpgsql;
 */
 
 CREATE index if not exists game_name_trgm_idx ON iris.game USING gin (name gin_trgm_ops);
-DROP FUNCTION iris.search_game_by_name(text,integer) ;
+-- DROP FUNCTION iris.search_game_by_name(text,integer) ;
 
 CREATE OR REPLACE FUNCTION iris.search_game_by_name(text, int)
 RETURNS TABLE (
@@ -404,5 +410,31 @@ BEGIN
         WHERE g.name ILIKE concat('%', $1, '%')
         ORDER BY similarity DESC
         LIMIT $2;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get most popular tracks from a collection
+    --> SELECT * FROM iris.get_collection_popular_tracks(%s, %s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_collection_popular_tracks(integer, integer)
+RETURNS TABLE (
+    game_id int,
+    title text,
+    slug text,
+    file uuid,
+    view_count int,
+    like_count int,
+    length int
+) AS $$
+BEGIN
+    RETURN QUERY SELECT t.game_id, t.title, t.slug, t.file, t.view_count, t.like_count, t.length FROM iris.track t
+        WHERE t.game_id IN 
+	        (SELECT id FROM iris.game g WHERE g.collection_id = $1)
+        ORDER BY view_count DESC, id 
+        LIMIT $2
+        OFFSET 0;
 END;
 $$ LANGUAGE plpgsql;

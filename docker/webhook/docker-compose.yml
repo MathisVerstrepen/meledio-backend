@@ -1,0 +1,14 @@
+# sudo docker compose up --build -d
+version: '3.9'
+
+services:
+  webhook-listener:
+    build: .
+    ports:
+      - "8081:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./front-compose.yml:/app/front-compose.yml"
+    environment:
+      - DOCKER_REGISTRY_USERNAME=admin
+      - DOCKER_REGISTRY_TOKEN=Severine77

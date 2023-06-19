@@ -11,6 +11,8 @@ import requests
 from slugify import slugify
 from datetime import datetime
 from timeit import default_timer as timer
+import blurhash
+from collections.abc import Generator
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -55,17 +57,25 @@ GAMEID_TABLES = [
 ]
 
 PRE_CALC_DATA = {
-    "base_columns": ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary'],
+    "base_columns": ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary', 'n_tracks'],
     "track_columns": ['title', 'track_slug', 'file', 'view_count', 'like_count', 'length'],
     "company_columns": ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id']
 }
 
 def image_downloader(IGDB_client, field, media):
     hash = media["image_id"]
+    blur_hashs = []
     for qual in DOWNLOAD_QUALITY[field]:
         res = IGDB_client.images(qual[0], hash)
         with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", "wb") as f:
             f.write(res)
+            
+        with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", 'rb') as image_file:
+            blur_hash = blurhash.encode(image_file, x_components=4, y_components=3)
+            if blur_hash : blur_hashs.append(blur_hash)
+            base_logger.info(f"Blurhash: {blur_hash}")
+    
+    return blur_hashs[-1]
 
 from app.utils.connection import IRIS_CONN, REDIS_GAMES
 
@@ -296,7 +306,9 @@ class iris:
                     elif field_type == 'media':
                         
                         def insert_media(media):
-                            query = sql.SQL("INSERT INTO iris.{table} (image_id, game_id, type, height, width) VALUES (%s,%s,%s,%s,%s);").format(
+                            blur_hash = image_downloader(self.IGDB_cli, field, media)
+                            
+                            query = sql.SQL("INSERT INTO iris.{table} (image_id, game_id, type, height, width, blur_hash) VALUES (%s,%s,%s,%s,%s,%s);").format(
                                     table=sql.Identifier(field_schema_data.get('field')),
                                 )
                             data = (
@@ -305,11 +317,12 @@ class iris:
                                 field,
                                 media.get("height"),
                                 media.get("width"),
+                                blur_hash,
                             )
                             curs.execute(query, data)
                             
-                            thread = threading.Thread(target=image_downloader, args=(self.IGDB_cli, field, media))
-                            thread.start()
+                            # thread = threading.Thread(target=image_downloader, args=(self.IGDB_cli, field, media))
+                            # thread.start()
                         
                         if isinstance(field_data, list):
                             for media in field_data: 
@@ -347,15 +360,15 @@ class iris:
                 "http://triton:5110/del_media", data=json.dumps({"medias": medias_hash})
             )
             
-            inCache = self.isGameCached(gameID)
+            # inCache = self.isGameCached(gameID)
             inDB = self.isGameInDatabase(curs, "game", gameID)
             
-            if inCache:
-                gameName = self.rcli.json().get(f"g:{gameID}", "$.name")[0]
-                self.rcli.json().set(f"g:{gameID}", "$", {
-                    'complete': False,
-                    'name': gameName
-                })
+            # if inCache:
+            #     gameName = self.rcli.json().get(f"g:{gameID}", "$.name")[0]
+            #     self.rcli.json().set(f"g:{gameID}", "$", {
+            #         'complete': False,
+            #         'name': gameName
+            #     })
                 
             if inDB: 
                 for table in GAMEID_TABLES:
@@ -457,11 +470,11 @@ class iris:
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             
-            query = sql.SQL("SELECT image_id FROM iris.media WHERE game_id=%s AND type=%s;")
+            query = sql.SQL("SELECT image_id, blur_hash FROM iris.media WHERE game_id=%s AND type=%s;")
             curs.execute(query, (gameID, media_type,))
             res = curs.fetchall()
 
-            return [row[0] for row in res]
+            return [{'id': row[0], 'blurhash': row[1]} for row in res]
 
     # ------------------------------ Main album data ----------------------------- #
         
@@ -621,7 +634,7 @@ class iris:
     
     # ------------------------------- Random Games ------------------------------- #
     
-    async def get_random_games(self, number: int, labels: list[str], debug: bool) -> list:
+    async def get_random_games(self, number: int, labels: list[str], debug: bool) -> Generator:
         """ Get a specified number of random games from the database that are complete
 
         Args:
@@ -630,7 +643,7 @@ class iris:
             debug (bool): Debug mode
 
         Returns:
-            list: List of random games data
+            generator: Generator of random games
         """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -644,27 +657,33 @@ class iris:
                     
     # ----------------------------- Top Rated Games ----------------------------- #
 
-    async def get_top_rated_games(self, number: int, labels: list[str], debug: bool) -> list:
+    async def get_top_rated_games(self, number: int, offset: int, labels: list[str], debug: bool) -> Generator:
         """ Get a specified number of top rated games from the database that are complete
 
         Args:
             number (int): Number of games to get
+            offset (int): Offset of games to get
             labels (list[str]): List of labels to filter by
             debug (bool): Debug mode
 
         Returns:
-            list: List of top rated games data
+            generator: Generator of top rated games data
         """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT id FROM iris.game WHERE complete AND rating IS NOT NULL ORDER BY rating desc LIMIT %s;")
-            curs.execute(query, (number,))
+            query = sql.SQL("SELECT id FROM iris.game WHERE complete AND rating IS NOT NULL ORDER BY rating desc LIMIT %s OFFSET %s;")
+            curs.execute(query, (number, offset,))
             top_rated_games_id = curs.fetchall()
             for top_rated_game_id in top_rated_games_id:
                 game = await self.get_game(top_rated_game_id[0], labels, debug)
                 if game:
                     yield game
-                    
+    
+    
+    # ---------------------------------------------------------------------------- #
+    #                            GET COLLECTION FUNCTIONS                          #
+    # ---------------------------------------------------------------------------- #
+    
     # ----------------------------- Get Collection ------------------------------ #
        
     async def get_collection(self, collectionID: int, labels: list[str], debug: bool) -> dict:
@@ -683,6 +702,8 @@ class iris:
             query = sql.SQL("SELECT * FROM iris.get_collection_info(%s)")
             curs.execute(query, (collectionID,))
             collection_games_id = curs.fetchall()
+                        
+            if not collection_games_id: return None
 
             # Create collection data
             collection = {
@@ -703,12 +724,12 @@ class iris:
 
     # --------------------------- Top Rated Collection -------------------------- #
 
-    async def get_top_rated_collection(self, number: int) -> list:
+    async def get_top_rated_collection(self, number: int, offset: int) -> list:
         """ Get a specified number of top rated collections from the database
 
         Args:
             number (int): Number of collections to get
-            debug (bool): Debug mode
+            offset (int): Offset of collections to get
 
         Returns:
             list: List of top rated collections data
@@ -716,36 +737,75 @@ class iris:
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
             start = timer()
-            query = sql.SQL("SELECT * FROM iris.get_top_collections(%s);")
-            curs.execute(query, (number,))
+            query = sql.SQL("SELECT * FROM iris.get_top_collections(%s, %s);")
+            curs.execute(query, (number, offset,))
             top_rated_collections = curs.fetchall()
             base_logger.info(top_rated_collections)
 
             # Parse top rated collections
-            parse_top_rated_collections = {}
-            last_collection_id = -1
-            for top_rated_collection in top_rated_collections:
-                if last_collection_id != top_rated_collection[0]:
-                    parse_top_rated_collections[top_rated_collection[0]] = {
+            parse_top_rated_collections = []
+            collection_id = []
+            last_collection_idx = []
+            for top_rate_collection in top_rated_collections:
+                if top_rate_collection[0] not in collection_id:
+                    parse_top_rated_collections.append({
                         "collection": {
-                            "name": top_rated_collection[1],
-                            "slug": top_rated_collection[2]
+                            "id": top_rate_collection[0],
+                            "name": top_rate_collection[1],
+                            "slug": top_rate_collection[2]
                         },
                         "games": []
-                    }
-                    last_collection_id = top_rated_collection[0]
-                parse_top_rated_collections[top_rated_collection[0]]["games"].append({
-                    "id": top_rated_collection[3],
-                    "name": top_rated_collection[4],
-                    "cover": top_rated_collection[5],
-                })
-
+                    })
+                    collection_id.append(top_rate_collection[0])
+                    last_collection_idx.append(len(parse_top_rated_collections) - 1)
+                parse_top_rated_collections[last_collection_idx[collection_id.index(top_rate_collection[0])]]["games"].append(
+                    {
+                        "id": top_rate_collection[3],
+                        "name": top_rate_collection[4],
+                        "cover": top_rate_collection[5],
+                        "blurhash": top_rate_collection[6],
+                    })
+                
             end = timer()
             return parse_top_rated_collections, (end - start) * 1000
         
+    # ----------------------------- Top Rated Tracks Collection ------------------------------- #
+    
+    async def get_collection_top_tracks(self, collectionID: int, number: int, debug: bool) -> Generator:
+        """ Get a specified number of top rated tracks from all games in a collection
+
+        Args:
+            collectionID (int): Collection ID
+            number (int): Number of tracks to get
+
+        Returns:
+            list: List of top rated tracks
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            start = timer()
+            query = sql.SQL("SELECT * FROM iris.get_collection_popular_tracks(%s, %s);")
+            curs.execute(query, (collectionID, number,))
+            tracks = curs.fetchall()
+            end = timer()
+            
+            if debug: base_logger.info(f"get_collection_top_tracks: {(end - start) * 1000}")
+            
+            for track in tracks:
+                yield {
+                    "game_id": track[0],
+                    "title": track[1],
+                    "slug": track[2],
+                    "file": track[3],
+                    "view_count": track[4],
+                    "like_count": track[5],
+                    "length": track[6],
+                }
+        
+        
     # --------------------------- Search By Name -------------------------- #
     
-    async def search_by_name(self, name: str, number: int) -> list:
+    async def search_by_name(self, name: str, number: int) -> Generator:
         """ Search for a game by name
 
         Args:
@@ -753,7 +813,7 @@ class iris:
             number (int): Number of results to get
 
         Returns:
-            list: List of search results
+            generator: Generator of search results
         """
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -769,6 +829,29 @@ class iris:
                     "complete": search_result[4],
                     "cover": search_result[5],
                 }
+                
+    # --------------------------- Last Released -------------------------- #
+    
+    async def get_last_released_games(self, number: int, labels: list[str], debug: bool) -> Generator:
+        """ Get a specified number of last released games from the database
+
+        Args:
+            number (int): Number of games to get
+            labels (list[str]): List of labels to filter by
+            debug (bool): Debug mode
+
+        Returns:
+            generator: Generator of last released games data
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT id FROM iris.game g WHERE g.first_release_date IS NOT NULL ORDER BY g.first_release_date DESC LIMIT %s;")
+            curs.execute(query, (number,))
+            last_released_games_id = curs.fetchall()
+            for last_released_game_id in last_released_games_id:
+                game = await self.get_game(last_released_game_id[0], labels, debug)
+                if game:
+                    yield game
 
 class iris_user:
     def __init__(self):

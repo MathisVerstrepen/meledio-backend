@@ -17,6 +17,13 @@ def raiseNoChapterFound(videoID: str) -> None:
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"No chapter found for video {videoID}",
     )
+    
+def raiseNoCollectionFound(collectionID: int) -> None:
+    base_logger.error("No collection found for ID [%s].", collectionID)
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"No collection found for ID {collectionID}",
+    )
 
 
 def raiseNoUserFound(userID: int) -> None:

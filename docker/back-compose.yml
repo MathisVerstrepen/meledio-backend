@@ -93,3 +93,7 @@ services:
     depends_on:
       - iris_db
       - atlas_redis
+
+networks:
+  default:
+    name: docker_default

@@ -8,7 +8,7 @@ API_ADMIN_KEY = "uAJRzpD5JQK8o8pHN7YsajXW6DoHmdoS"
 headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_ADMIN_KEY}"}
 debug = {}
 
-for i in range(1000, 2000):
+for i in range(2000, 3000):
     querystring = {"gameID": i}
     res = requests.request(
         "POST", url, headers=headers, params=querystring

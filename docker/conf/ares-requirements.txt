@@ -18,3 +18,4 @@ pydub
 ddtrace
 scipy
 numpy
+blurhash-python
