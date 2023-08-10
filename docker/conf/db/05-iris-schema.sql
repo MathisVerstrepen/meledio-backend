@@ -422,6 +422,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION iris.get_collection_popular_tracks(integer, integer)
 RETURNS TABLE (
     game_id int,
+    game_title text,
+    game_slug text,
+    cover text,
     title text,
     slug text,
     file uuid,
@@ -430,11 +433,211 @@ RETURNS TABLE (
     length int
 ) AS $$
 BEGIN
-    RETURN QUERY SELECT t.game_id, t.title, t.slug, t.file, t.view_count, t.like_count, t.length FROM iris.track t
+    RETURN QUERY SELECT t.game_id, g.name , g.slug, m.image_id, t.title, t.slug, t.file, t.view_count, t.like_count, t.length FROM iris.track t
+    	left JOIN (select m.game_id, m.image_id from iris.media m where m."type" = 'cover') m ON t.game_id = m.game_id
+    	left join iris.game g on g.id = t.game_id
         WHERE t.game_id IN 
-	        (SELECT id FROM iris.game g WHERE g.collection_id = $1)
+	        (SELECT id FROM iris.game WHERE iris.game.collection_id = $1)
+        ORDER BY t.view_count DESC, t.id 
+        LIMIT $2
+        OFFSET 0;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get most popular tracks from a game
+    --> SELECT * FROM iris.get_game_popular_tracks(%s, %s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_game_popular_tracks(integer, integer)
+RETURNS TABLE (
+    title text,
+    slug text,
+    file uuid,
+    view_count int,
+    like_count int,
+    length int
+) AS $$
+BEGIN
+    RETURN QUERY SELECT t.title, t.slug, t.file, t.view_count, t.like_count, t.length FROM iris.track t
+        WHERE t.game_id = $1
         ORDER BY view_count DESC, id 
         LIMIT $2
         OFFSET 0;
 END;
 $$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all albums related to a game
+    --> SELECT * FROM iris.get_game_albums(%s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_game_albums(integer)
+RETURNS TABLE (
+    game_id int,
+    game_name text,
+    game_slug text,
+    game_cover text,
+    game_blurhash text,
+    album_id int,
+    album_name text,
+    album_slug text,
+    album_n_tracks bigint
+) AS $$
+BEGIN
+    RETURN QUERY with gid as (select * from iris.game g where g.id = $1 or g.parent_game = $1)
+    	SELECT a.game_id, gid.name, gid.slug, m.image_id, m.blur_hash, a.id, a.name, a.slug,
+    	(SELECT COUNT(t.id) FROM iris.track t LEFT JOIN iris.album_track a_t ON t.id = a_t.track_id WHERE a.id = a_t.album_id)
+    	FROM iris.album a
+        join gid on gid.id = a.game_id 
+        left JOIN (select m.game_id, m.image_id, m.blur_hash from iris.media m where m."type" = 'cover') m ON a.game_id = m.game_id
+        WHERE gid.complete;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all similar games to a game
+    --> SELECT * FROM iris.get_similar_games(%s);
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_similar_games(integer)
+RETURNS TABLE (
+    game_id int,
+    name text,
+    slug text,
+    cover_id text,
+    cover_blurhash text
+) AS $$
+BEGIN
+    RETURN QUERY with similar_games as (select ec.extra_id as id  from iris.extra_content ec 
+		where ec.game_id = $1
+			and ec."type" = 'similar_games')
+		select sg.id, g."name", g.slug, m.image_id, m.blur_hash from iris.game g 
+			right join similar_games sg on sg.id = g.id
+			left JOIN (select m.game_id, m.image_id, m.blur_hash from iris.media m where m."type" = 'cover') m ON sg.id = m.game_id
+			where g.complete;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all developers in the database
+    --> SELECT * FROM iris.get_all_devs();
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_all_devs()
+RETURNS TABLE (
+    id int,
+    name text
+) AS $$
+BEGIN
+    RETURN QUERY select distinct c.id, c.name
+    	from iris.company c 
+    	left join iris.involved_companies ic on c.id = ic.company_id 
+    	where ic.developer 
+    	order by c.name;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all genres and the number of games in each genre
+    --> SELECT * FROM iris.get_genres();
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_genres()
+RETURNS TABLE (
+    name text,
+    count bigint
+) AS $$
+BEGIN
+    RETURN QUERY select g.name, count(g.game_id) from iris.genre g 
+		group by g.name 
+		order by count desc, g.name;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get all categories and the number of games in each genre
+    --> SELECT * FROM iris.get_categories();
+*/
+
+CREATE OR REPLACE FUNCTION iris.get_categories()
+RETURNS TABLE (
+	id int,
+    name text,
+    count bigint
+) AS $$
+BEGIN
+    RETURN QUERY select c.id, c.name, count(c.id) from iris.category c 
+		left join iris.game g on g.category = c.id 
+		group by c.id
+		order by count desc, c.name;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+    Create a function to get search results
+    --> SELECT * FROM iris.search_games();
+*/
+
+
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE OR REPLACE FUNCTION iris.search_games(
+    _game_name TEXT,
+    _category INT[], _company_id INT[], _genre_name TEXT[], 
+    _rating_lower_bound REAL, _rating_upper_bound REAL, 
+    _release_date_lower_bound DATE, _release_date_upper_bound DATE,
+    _limit INT, _offset INT, _order INT
+)
+RETURNS TABLE(
+    id INT,
+    name TEXT,
+    slug text,
+    complete boolean,
+    rating DOUBLE precision,
+    release_date date,
+    cover text,
+    blurhash text
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT sub.id, sub.name, sub.slug, sub.complete, sub.rating, sub.first_release_date, sub.image_id, sub.blur_hash
+    FROM (
+        SELECT distinct g.id as id, g.name as name, g.slug as slug, g.complete as complete, g.rating as rating, g.first_release_date as first_release_date, m.image_id as image_id, m.blur_hash as blur_hash,
+            CASE WHEN _order = 1 THEN g.name END AS sort_name_asc,
+            CASE WHEN _order = 2 THEN g.name END AS sort_name_desc,
+            CASE WHEN _order = 3 THEN g.rating END AS sort_rating_asc,
+            CASE WHEN _order = 4 THEN g.rating END AS sort_rating_desc,
+            CASE WHEN _order = 5 THEN g.first_release_date END AS sort_date_asc,
+            CASE WHEN _order = 6 THEN g.first_release_date END AS sort_date_desc
+        FROM iris.game AS g
+        LEFT JOIN iris.involved_companies AS ic ON ic.game_id = g.id
+        LEFT JOIN iris.genre AS g2 ON g.id = g2.game_id
+        LEFT JOIN (select m.game_id, m.image_id, m.blur_hash from iris.media m where m."type" = 'cover') m ON g.id = m.game_id
+        WHERE 
+            (unaccent(lower(g.name)) ILIKE unaccent(lower('%' || _game_name || '%')))
+            AND (array_length(_category, 1) IS NULL OR g.category = ANY(_category))
+            AND ic.developer
+            AND (array_length(_company_id, 1) IS NULL OR ic.company_id = ANY(_company_id))
+            AND (array_length(_genre_name, 1) IS NULL OR g2."name" = ANY(_genre_name))
+            AND g.rating >= _rating_lower_bound AND g.rating <= _rating_upper_bound
+            AND g.first_release_date >= _release_date_lower_bound AND g.first_release_date <= _release_date_upper_bound
+    ) sub
+    ORDER BY 
+        sort_name_asc ASC NULLS LAST,
+        sort_name_desc DESC NULLS LAST,
+        sort_rating_asc ASC NULLS LAST,
+        sort_rating_desc DESC NULLS LAST,
+        sort_date_asc ASC NULLS LAST,
+        sort_date_desc DESC NULLS LAST
+    limit _limit offset _offset;
+END; $$ 
+LANGUAGE plpgsql;
+

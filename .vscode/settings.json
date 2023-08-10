@@ -1,0 +1,16 @@
+{
+    "nuxt.isNuxtApp": false,
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "65.21.91.39",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Dune",
+            "group": "Dune",
+            "username": "postgres",
+            "password": "3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF",
+            "database": "postgres"
+        }
+    ]
+}

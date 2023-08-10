@@ -30,6 +30,11 @@ from app.utils.loggers import base_logger
 from app.utils.loggers import get_database_logger
 sql_logger, LoggingCursor = get_database_logger()
 
+from psycopg2.extras import RealDictCursor
+
+class LoggingRealDictCursor(RealDictCursor, LoggingCursor):
+    pass
+
 DOWNLOAD_QUALITY = {
     "artworks": [
         ["screenshot_med", "a_m"],
@@ -59,7 +64,9 @@ GAMEID_TABLES = [
 PRE_CALC_DATA = {
     "base_columns": ['name', 'slug', 'complete', 'parent_game', 'category', 'collection_id', 'first_release_date', 'rating', 'popularity', 'summary', 'n_tracks'],
     "track_columns": ['title', 'track_slug', 'file', 'view_count', 'like_count', 'length'],
-    "company_columns": ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id']
+    "company_columns": ['company_id', 'developer', 'porting', 'publisher', 'supporting', 'name', 'slug', 'description', 'logo_id'],
+    "album_columns": ['game_id', 'game_name', 'game_slug', 'game_cover', 'game_blurhash', 'album_id', 'album_name', 'album_slug', 'album_n_tracks'],
+    'similar_games_columns': ['game_id', 'name', 'slug', 'cover', 'blurhash'],
 }
 
 def image_downloader(IGDB_client, field, media):
@@ -479,7 +486,7 @@ class iris:
     # ------------------------------ Main album data ----------------------------- #
         
     def get_game_album(self, gameID: int) -> dict:
-        """ Get all data from the album of a game in the database
+        """ Get all data from the main album of a game in the database
 
         Args:
             gameID (int): Game ID
@@ -503,6 +510,59 @@ class iris:
             else: 
                 return {}
         
+    # ---------------------------- Similar games data ---------------------------- # 
+    
+    def get_similar_games(self, gameID: int) -> list[dict]:
+        """ Get all data from the similar games of a game in the database
+
+        Args:
+            gameID (int):  Game ID
+
+        Returns:
+            list[dict]: Similar games data
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_similar_games(%s)")
+            curs.execute(query, (gameID,))
+            res = curs.fetchall()
+
+            return [{
+                        "gameID" : row[0],
+                        "data" : {
+                            "base" : {
+                                "name" : row[1],
+                                "slug" : row[2],
+                            },
+                            "cover" : [
+                                {
+                                    "id" : row[3],
+                                    "blurhash" : row[4]
+                                }
+                            ]                            
+                        }
+                    } for row in res]
+        
+    
+    # ---------------------------- All related Albums ---------------------------- #
+    
+    async def get_game_albums(self, gameID: int) -> list:
+        """ Get all data from the related albums of a game in the database
+
+        Args:
+            gameID (int): Game ID
+
+        Returns:
+            list: Related albums data
+        """
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_game_albums(%s)")
+            curs.execute(query, (gameID,))
+            res = curs.fetchall()
+
+            return [{column: row[i] for i, column in enumerate(PRE_CALC_DATA['album_columns'])} for row in res]
+
     # -------------------------- Involved companies data ------------------------- #
         
     def get_game_involved_companies(self, gameID: int) -> dict:
@@ -679,6 +739,28 @@ class iris:
                 if game:
                     yield game
     
+    # ------------------------ Top Listened Tracks by game ----------------------- #
+    
+    async def get_top_listened_tracks(self, gameID: int, number: int, debug: bool) -> Generator:
+        
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            start = timer()
+            query = sql.SQL("SELECT * FROM iris.get_game_popular_tracks(%s, %s);")
+            curs.execute(query, (gameID, number,))
+            tracks = curs.fetchall()
+            end = timer()
+            
+            if debug: base_logger.info(f"get_game_popular_tracks: {(end - start) * 1000}")
+            
+            for track in tracks:
+                yield {
+                    "title": track[0],
+                    "slug": track[1],
+                    "file": track[2],
+                    "view_count": track[3],
+                    "like_count": track[4],
+                    "length": track[5],
+                }
     
     # ---------------------------------------------------------------------------- #
     #                            GET COLLECTION FUNCTIONS                          #
@@ -772,14 +854,14 @@ class iris:
     # ----------------------------- Top Rated Tracks Collection ------------------------------- #
     
     async def get_collection_top_tracks(self, collectionID: int, number: int, debug: bool) -> Generator:
-        """ Get a specified number of top rated tracks from all games in a collection
+        """ Get a specified number of most listened tracks from all games in a collection
 
         Args:
             collectionID (int): Collection ID
             number (int): Number of tracks to get
 
         Returns:
-            list: List of top rated tracks
+            list: List of most listened tracks data
         """
         
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -787,48 +869,95 @@ class iris:
             query = sql.SQL("SELECT * FROM iris.get_collection_popular_tracks(%s, %s);")
             curs.execute(query, (collectionID, number,))
             tracks = curs.fetchall()
-            end = timer()
+            end = timer() 
             
             if debug: base_logger.info(f"get_collection_top_tracks: {(end - start) * 1000}")
             
             for track in tracks:
                 yield {
-                    "game_id": track[0],
-                    "title": track[1],
-                    "slug": track[2],
-                    "file": track[3],
-                    "view_count": track[4],
-                    "like_count": track[5],
-                    "length": track[6],
+                    "game_data": {
+                        "id": track[0],
+                        'name': track[1],
+                        'slug': track[2],
+                        'cover': track[3],
+                    },
+                    "title": track[4],
+                    "slug": track[5],
+                    "file": track[6],
+                    "view_count": track[7],
+                    "like_count": track[8],
+                    "length": track[9],
                 }
         
         
     # --------------------------- Search By Name -------------------------- #
     
-    async def search_by_name(self, name: str, number: int) -> Generator:
-        """ Search for a game by name
-
+    # SQL Function :
+    # CREATE OR REPLACE FUNCTION search_games(
+	# _game_name TEXT,
+    # _category INT[], _company_id INT[], _genre_name TEXT[], 
+    # _rating_lower_bound REAL, _rating_upper_bound REAL, 
+    # _release_date_lower_bound DATE, _release_date_upper_bound DATE,
+    # _limit INT, _offset INT
+    # )
+    
+    async def get_search_results(self, searchObject: dict) -> list:
+        """ Get search results
+        
         Args:
-            name (str): Name to search for
-            number (int): Number of results to get
+            searchObject (dict): Search object
 
         Returns:
-            generator: Generator of search results
+            _type_: _description_
         """
-
-        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
-            query = sql.SQL("SELECT * FROM iris.search_game_by_name(%s, %s);")
-            curs.execute(query, (name, number))
+        base_logger.info(searchObject)
+        
+        order_table = {
+            "name_asc": 1,
+            "name_desc": 2,
+            "rating_asc": 3,
+            "rating_desc": 4,
+            "release_date_asc": 5,
+            "release_date_desc": 6,
+        }
+        
+        with self.conn.cursor(cursor_factory=LoggingRealDictCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.search_games(%s::text, %s::int[], %s::int[], %s::text[], %s::real, %s::real, %s::date, %s::date, %s::int, %s::int, %s::int);")
+            curs.execute(query, (
+                searchObject.get("game_name", ""),
+                searchObject.get("categories", []),
+                searchObject.get("developers", []),
+                searchObject.get("genres", []),
+                searchObject.get("rating", {}).get("from", 0),
+                searchObject.get("rating", {}).get("to", 100),
+                searchObject.get("releaseDate", {}).get("from", "1900-01-01"),
+                searchObject.get("releaseDate", {}).get("to", "2100-01-01"),
+                searchObject.get("limit", 50),
+                searchObject.get("offset", 0),
+                order_table.get(searchObject.get("order", "name_asc"), 1),
+            ))
             search_results = curs.fetchall()
-            for search_result in search_results:
-                yield {
-                    "similarity": search_result[0],
-                    "id": search_result[1],
-                    "name": search_result[2],
-                    "slug": search_result[3],
-                    "complete": search_result[4],
-                    "cover": search_result[5],
-                }
+            
+            # Parse search results
+            # parse_search_results = []
+            # for search_result in search_results:
+            #     parse_search_results.append({
+            #         "id": search_result[0],
+            #         "name": search_result[1],
+            #         "slug": search_result[2],
+            #         "cover": search_result[3],
+            #         "blurhash": search_result[4],
+            #         "rating": search_result[5],
+            #         "release_date": search_result[6],
+            #         "genres": search_result[7],
+            #         "categories": search_result[8],
+            #         "companies": search_result[9]
+            #     })
+            
+            return search_results
+            
+                
+        
                 
     # --------------------------- Last Released -------------------------- #
     
@@ -852,6 +981,52 @@ class iris:
                 game = await self.get_game(last_released_game_id[0], labels, debug)
                 if game:
                     yield game
+                    
+    # --------------------------- Developer Companies -------------------------- #
+    
+    async def get_dev_companies(self) -> list[dict]:
+        """ Get all developer companies
+
+        Returns:
+            list[dict]: List of developer companies
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_all_devs();")
+            curs.execute(query)
+            dev_companies = curs.fetchall()
+            return dev_companies
+        
+    # --------------------------- All Genres + count -------------------------- #
+    
+    async def get_genres(self) -> list[dict]:
+        """ Get all genres
+
+        Returns:
+            list[dict]: List of genres
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_genres();")
+            curs.execute(query)
+            genres = curs.fetchall()
+            return genres
+        
+    # --------------------------- All Categories + count -------------------------- #
+    
+    async def get_categories(self) -> list[dict]:
+        """ Get all categories
+
+        Returns:
+            list[dict]: List of categories
+        """
+
+        with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
+            query = sql.SQL("SELECT * FROM iris.get_categories();")
+            curs.execute(query)
+            categories = curs.fetchall()
+            return categories
+        
 
 class iris_user:
     def __init__(self):
