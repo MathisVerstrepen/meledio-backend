@@ -6,27 +6,61 @@ import os
 import pathlib
 import uuid
 import threading
+from contextlib import asynccontextmanager
 import redis
-import psycopg2
+import psycopg
 
 from fastapi import FastAPI, Path, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from app.internal.iris_db_connection import IrisAsyncConnection
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-IRIS_PASS = os.getenv("POSTGRES_PASSWORD")
-IRIS_HOST = os.getenv("POSTGRES_HOST")
+# IRIS_PASS = os.getenv("POSTGRES_PASSWORD")
+# IRIS_HOST = os.getenv("POSTGRES_HOST")
 
-IRIS_CONN = psycopg2.connect(
-    database="",
-    user="postgres",
-    password=IRIS_PASS,
-    host=IRIS_HOST,
-    port="5432",
+# IRIS_CONN = psycopg2.connect(
+#     database="",
+#     user="postgres",
+#     password=IRIS_PASS,
+#     host=IRIS_HOST,
+#     port="5432",
+# )
+
+logging.basicConfig(
+    filename="app/logs/triton.log",
+    encoding="utf-8",
+    level=logging.DEBUG,
+    format="%(asctime)s -- %(levelname)s -- %(message)s",
 )
+
+IRIS_CONN = None
+
+@asynccontextmanager
+async def get_iris_conn(app: FastAPI):  # pylint: disable=unused-argument
+    """Initialize FastAPI objects before starting the app"""
+
+    # Init IRIS connection
+    conn = IrisAsyncConnection()
+    try:
+        await conn.connect_to_iris()
+    except psycopg.Error as e:
+        logging.error("Error connecting to IRIS: %s", e)
+        raise e
+    
+    global IRIS_CONN
+    IRIS_CONN = conn.get_conn()
+    
+    logging.info("Connected to IRIS")
+
+    yield  # All the code after this line is executed after the app is closed
+
+    # Close IRIS connection
+    await conn.close()
 
 class ConnectionManager:
     def __init__(self):
@@ -50,14 +84,9 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
+r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_PASSWORD"))
 
-logging.basicConfig(
-    filename="app/logs/triton.log",
-    encoding="utf-8",
-    level=logging.DEBUG,
-    format="%(asctime)s -- %(levelname)s -- %(message)s",
-)
+
 
 # patch(fastapi=True)
 triton = FastAPI()
@@ -94,6 +123,10 @@ def increment_listen_count(fileID):
 from fastapi.staticfiles import StaticFiles
 
 triton.mount("/static", StaticFiles(directory="/bacchus/audio/"), name="static")
+
+@triton.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 
 @triton.get("/audio/{gameID}/{albumID}/{trackID}/{filename}")

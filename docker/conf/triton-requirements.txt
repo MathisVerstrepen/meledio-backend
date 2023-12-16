@@ -1,10 +1,21 @@
-fastapi>=0.68.0,<0.69.0
-pydantic>=1.8.0,<2.0.0
-uvicorn>=0.15.0,<0.16.0
-aiofiles
+# Frameworks Web et Serveurs
+fastapi
+uvicorn
 websockets
+
+# Validation et Serialization des Données
+pydantic
+
+# Traitement de Fichiers et IO Asynchrone
+aiofiles
 pydub
+
+# Base de Données et Caching
+psycopg[binary]
 redis
+
+# Gestion de l'Environnement
 python-dotenv
+
+# Outils de Développement et Debugging
 ddtrace
-psycopg2

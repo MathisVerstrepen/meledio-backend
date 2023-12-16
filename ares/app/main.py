@@ -1,4 +1,3 @@
-import asyncio
 import time
 from contextlib import asynccontextmanager
 import requests
@@ -80,20 +79,6 @@ ares.include_router(youtube_routes.router)
 from app.routers import task_routes
 
 ares.include_router(task_routes.router)
-
-# from app.routers import game_construction  # TO REFACTOR
-# ares.include_router(game_construction.router)
-
-# from app.routers import v1_public  # TO REFACTOR
-# ares.include_router(v1_public.router)
-
-# Init Redis connections
-# from app.utils.connection import REDIS_USERS
-
-# Init API clients
-# IGDB_cli = IGDB()
-# iris_cli = iris()
-# s1_cli = s1()
 
 
 # ------------------ IGDB EXCEPTION HANDLERS ---------------------- #
@@ -204,11 +189,18 @@ ares.add_middleware(
 
 @ares.middleware("http")
 async def add_process_time_header(request, call_next):
+    """Add X-Process-Time header to every response"""
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(f"{process_time:0.4f} sec")
     return response
+
+
+@ares.get("/health")
+async def health_check():
+    """Health check endpoint for docker-compose"""
+    return {"status": "healthy"}
 
 
 if __name__ == "__main__":
