@@ -18,11 +18,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ------ Load basic knowledge needed for database push of retrived data ------ #
-f = open('./app/json/sql_game_schema.json')
+f = open('./app/config/IGDB_IRIS_association.json')
 SQL_schema: dict = json.load(f)
 
 # ------------- Load category_id / category label correspondance ------------- #
-f = open('./app/json/category.json')
+f = open('./app/config/category.json')
 SQL_category: dict = json.load(f)
 
 # -------------------- Create database cursor with logging ------------------- #
@@ -80,7 +80,6 @@ def image_downloader(IGDB_client, field, media):
         with open(f"/bacchus/media/{qual[1]}_{hash}.jpg", 'rb') as image_file:
             blur_hash = blurhash.encode(image_file, x_components=4, y_components=3)
             if blur_hash : blur_hashs.append(blur_hash)
-            base_logger.info(f"Blurhash: {blur_hash}")
     
     return blur_hashs[-1]
 
@@ -104,6 +103,7 @@ class iris:
             curs.execute(query, (gameID,))
             return curs.fetchone()[0]
         
+    # UNUSED
     def getAlbum(self, gameID: int, albumName: str) -> list:
         """Get the playlist of a game by its name if it exists
 
@@ -122,6 +122,7 @@ class iris:
                 return []
             return curs.fetchall()
         
+    # UNUSED
     def addAlbum(self, gameID: int, albumName: str, trackIDs: list):
         """ Add a new album to the database
 
@@ -137,6 +138,7 @@ class iris:
         
         self.conn.commit()
 
+    # UNUSED
     def searchGameByName(self, searchText : str) :
         req = f"({searchText})|({searchText.strip()}*)|({searchText.strip()})"
         returnVal = []
@@ -184,6 +186,7 @@ class iris:
     #                                 PUSH NEW GAME                                #
     # ---------------------------------------------------------------------------- #
 
+    # MIGRATION DONE
     def push_new_game(self, game_data: dict) -> None:
         """Push new game to database
 
@@ -191,6 +194,7 @@ class iris:
             game_data (_type_): _description_
         """
         
+        base_logger.info("Pushing new game to database.")
         gameID = game_data[0]["id"]
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -204,7 +208,7 @@ class iris:
                 curs.execute(query, data)
 
             if not INDB or not INDB[0]:
-                #-- Upload all metadata to DB and cache --#
+                #-- Upload all metadata to DB --#
                 
                 for field in game_data[0]:
                     logging.info(field)
@@ -277,10 +281,7 @@ class iris:
                     #-- Company and involved companies tables --#    
                     elif field_type == 'company':
                         
-                        logging.info(field_data)
                         company_data: list = self.IGDB_cli.companies(field_data)
-                        logging.info(company_data)
-                        logging.info(field)
                         for company in company_data:
                             query = sql.SQL("INSERT INTO iris.{table} (id, name, slug, description, logo_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING;").format(
                                     table=sql.Identifier(field_schema_data.get('sub_field')),
@@ -327,9 +328,6 @@ class iris:
                                 blur_hash,
                             )
                             curs.execute(query, data)
-                            
-                            # thread = threading.Thread(target=image_downloader, args=(self.IGDB_cli, field, media))
-                            # thread.start()
                         
                         if isinstance(field_data, list):
                             for media in field_data: 
@@ -354,6 +352,7 @@ class iris:
                                     
         self.conn.commit()
 
+
     def del_game(self, gameID: int) -> bool:
 
         with self.conn.cursor(cursor_factory=LoggingCursor) as curs:
@@ -364,7 +363,7 @@ class iris:
             medias_hash = [hash[0] for hash in res]
 
             requests.delete(
-                "http://triton:5110/del_media", data=json.dumps({"medias": medias_hash})
+                "http://media.meledio.com/del_media", data=json.dumps({"medias": medias_hash})
             )
             
             # inCache = self.isGameCached(gameID)
@@ -955,8 +954,6 @@ class iris:
             #     })
             
             return search_results
-            
-                
         
                 
     # --------------------------- Last Released -------------------------- #

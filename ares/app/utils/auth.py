@@ -6,5 +6,4 @@ load_dotenv()
 
 
 def admin_auth(token: str):
-    if token != getenv("ARES_TOKEN"):
-        raiseAuthFailed()
+    return token.split(" ")[1] == getenv("ARES_TOKEN")

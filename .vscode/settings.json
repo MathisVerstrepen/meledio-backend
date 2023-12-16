@@ -1,16 +1,20 @@
 {
     "nuxt.isNuxtApp": false,
-    "sqltools.connections": [
-        {
-            "previewLimit": 50,
-            "server": "65.21.91.39",
-            "port": 5432,
-            "driver": "PostgreSQL",
-            "name": "Dune",
-            "group": "Dune",
-            "username": "postgres",
-            "password": "3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF",
-            "database": "postgres"
-        }
-    ]
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "python.linting.mypyArgs": [
+        "--ignore-missing-imports",
+        "--follow-imports=silent",
+        "--show-column-numbers",
+        "--allow-untyped-defs",
+        "--allow-subclassing-any",
+        "--allow-untyped-calls",
+        "--max-line-length=80",
+        "--disable=E0401"
+      ],
+    "pylint.args": [
+        "--max-line-length=80",
+        "--disable=E0401,E0611,C0114"
+    ],
 }

@@ -1,0 +1,115 @@
+# docker compose -f back-compose.yml up -d
+
+version: "3.1"
+name: dune_dev
+
+services:
+  iris_db:
+    container_name: iris_db_dev
+    image: postgres:16.1-alpine3.19
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    restart: unless-stopped
+    ports:
+      - ${POSTGRES_PORT}:5432
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ${DB_VOLUME}/data:/var/lib/postgresql/data
+      - ${DB_CONFIG}:/docker-entrypoint-initdb.d
+      - ${DB_CONF}:/etc/postgresql/postgresql.conf
+    healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U postgres"]
+          interval: 2s
+          timeout: 5s
+          retries: 5
+    networks:
+      - dune_dev
+
+
+  # redis-overcommit:
+  #   build: https://github.com/bkuhl/redis-overcommit-on-host.git
+  #   restart: 'no'
+  #   privileged: true
+  #   volumes:
+  #     - /proc/sys/vm:/mnt/vm
+  #   networks:
+  #     - dune_dev
+
+  atlas_redis:
+    container_name: atlas_redis_dev
+    image: redis:7.2.3-alpine
+    restart: unless-stopped
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ${REDIS_VOLUME}:/data
+    ports:
+      - ${REDIS_PORT}:6379
+    # depends_on:
+    #   - redis-overcommit
+    networks:
+      - dune_dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  ares_api:
+    container_name: ares_api_dev
+    image: dune_ares:dev
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${ARES_FOLDER}
+        target: /ares/app
+      - type: bind
+        source: ${BACCHUS_FOLDER}
+        target: /bacchus
+    ports:
+      - ${ARES_PORT}:5100
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=iris_db_dev
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - IGDB_ID=${IGDB_ID}
+      - IGDB_SECRET=${IGDB_SECRET}
+      - ARES_TOKEN=${ARES_TOKEN}
+      - BACCHUS_FOLDER=${BACCHUS_FOLDER}
+      - REDIS_HOST=atlas_redis_dev
+    depends_on:
+      iris_db:
+        condition: service_healthy
+      atlas_redis:
+        condition: service_healthy
+    links:
+      - iris_db
+      - atlas_redis
+    networks:
+      - dune_dev
+
+  triton_api:
+    container_name: triton_api_dev
+    image: dune_triton:dev
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${TRITON_FOLDER}
+        target: /triton/app
+      - type: bind
+        source: ${BACCHUS_FOLDER}
+        target: /bacchus
+    ports:
+      - ${TRITON_PORT}:5110
+    environment:
+      - BACCHUS_FOLDER=${BACCHUS_FOLDER}
+    depends_on:
+      iris_db:
+        condition: service_healthy
+      atlas_redis:
+        condition: service_healthy
+    networks:
+      - dune_dev
+
+networks:
+  dune_dev:
+    driver: bridge

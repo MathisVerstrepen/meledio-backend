@@ -1,4 +1,4 @@
-# docker build -t dune_ares:latest -f ares.dockerfile ../
+# sudo docker build -t dune_ares:latest -f ares_dev.dockerfile ../
 
 FROM python:3.11
 

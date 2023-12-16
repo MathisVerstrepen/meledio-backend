@@ -1,21 +1,53 @@
-fastapi>=0.68.0,<0.69.0
-slowapi
-pydantic>=1.8.0,<2.0.0
-uvicorn>=0.15.0,<0.16.0
+# Frameworks Web et Serveurs
+fastapi
+uvicorn
+
+# Clients HTTP
+httpx[socks]
 requests
-python-dotenv
+
+# Validation et Serialization des Données
+pydantic
+
+# Manipulation de Texte et de Chaînes de Caractères
+awesome-slugify
 fuzzywuzzy
-typing
-redis
-psycopg2
 python-Levenshtein
+
+# Gestion de l'Environnement
+python-dotenv
+
+# Base de Données et Caching
+psycopg2
+psycopg[binary]
+redis
+
+# Outils de Développement et Debugging
+ddtrace
+mypy
 rich
+
+# Bibliothèques de Sciences de Données et Mathématiques
+numpy
+scipy
+scikit-learn
+statsmodels
+
+# Traitement de Fichiers et IO Asynchrone
+aiofiles
+pydub
+soundfile
+
+# Visualisation de Données
+matplotlib
+
+# Traitement d'Images et Vidéos
+blurhash-python
 selenium
 webdriver-manager
 yt_dlp
-awesome-slugify
-pydub
-ddtrace
-scipy
-numpy
-blurhash-python
+
+# Autres
+random_user_agent
+slowapi
+typing

@@ -1,4 +1,4 @@
-# docker build -t dune_ares:latest -f ares.dockerfile ../
+# sudo docker build -t dune_ares:latest -f ares_dev.dockerfile ../
 
 FROM python:3.11
 
@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir --upgrade -r /ares/requirements.txt
 
 COPY ./ares /ares
 
-CMD ["uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100", "--reload", "--reload-dir", "/ares", "--reload-delay", "1"]
+CMD ["uvicorn", "app.main:ares", "--proxy-headers", "--host", "0.0.0.0", "--port", "5100"]

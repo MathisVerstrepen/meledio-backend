@@ -1,26 +1,32 @@
-from fastapi import Body, FastAPI, Path, HTTPException, status, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from os.path import exists
 import glob
 import json
 import logging
 import os
 import pathlib
-import redis
-import psycopg2
 import uuid
 import threading
+import redis
+import psycopg2
 
+from fastapi import FastAPI, Path, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+IRIS_PASS = os.getenv("POSTGRES_PASSWORD")
+IRIS_HOST = os.getenv("POSTGRES_HOST")
 
 IRIS_CONN = psycopg2.connect(
     database="",
     user="postgres",
-    password="3VPZj2ipBGQTtRgutnv9759TM6HLB49VNFm96sXiP4XzshUEg7fPd5iernNFhqaF",
-    host="iris",
+    password=IRIS_PASS,
+    host=IRIS_HOST,
     port="5432",
 )
-
 
 class ConnectionManager:
     def __init__(self):
@@ -39,10 +45,11 @@ class ConnectionManager:
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
+
+
 manager = ConnectionManager()
 
-from dotenv import load_dotenv
-load_dotenv()
+
 r_games = redis.Redis(host="atlas", port=6379, db=0, password=os.getenv("REDIS_SECRET"))
 
 logging.basicConfig(
@@ -68,30 +75,40 @@ triton.add_middleware(
 
 
 validation_cat = {
-    'artwork': 'a',
-    'screenshot': 's',
-    'cover': 'c',
+    "artwork": "a",
+    "screenshot": "s",
+    "cover": "c",
 }
-validation_qual = {
-    'big': 'b',
-    'med': 'm',
-    'huge': 'h',
-    'small': 's'
-}
+validation_qual = {"big": "b", "med": "m", "huge": "h", "small": "s"}
+
 
 def increment_listen_count(fileID):
     with IRIS_CONN.cursor() as cursor:
-        cursor.execute("UPDATE iris.track SET view_count = view_count + 1 WHERE file = %s", (fileID,))
+        cursor.execute(
+            "UPDATE iris.track SET view_count = view_count + 1 WHERE file = %s",
+            (fileID,),
+        )
         IRIS_CONN.commit()
+
+
+from fastapi.staticfiles import StaticFiles
+
+triton.mount("/static", StaticFiles(directory="/bacchus/audio/"), name="static")
+
+
+@triton.get("/audio/{gameID}/{albumID}/{trackID}/{filename}")
+async def read_video(gameID: int, albumID: str, trackID: int, filename: str):
+    logging.debug(f"gameID: {gameID}, trackID: {trackID}, filename: {filename}")
+    file_path = f"/bacchus/audio/{gameID}/{albumID}/{trackID}/{filename}"
+    return FileResponse(file_path)
 
 
 @triton.get("/media/{cat}/{qual}/{hash}")
 async def get_best_matching_games(
     cat: str = Path(default=..., title="media category"),
     qual: str = Path(default=..., title="media quality"),
-    hash: str = Path(default=..., title="media hash/id")
+    hash: str = Path(default=..., title="media hash/id"),
 ) -> FileResponse:
-
     headers = {"Cache-Control": "public, max-age=15552000"}
 
     format_cat = validation_cat.get(cat)
@@ -108,22 +125,23 @@ async def get_best_matching_games(
     )
 
 
-@triton.delete("/del_media")
-async def delete_media(body: dict = Body(...)) -> dict:
-    medias = body.get('medias')
+@triton.delete("/api/games/images")
+async def delete_media(game_id: str) -> dict:
     nfile = 0
-    if medias:
-        for hash in medias:
-            for f in glob.glob(f"/bacchus/media/*{hash}*"):
-                os.remove(f)
-                nfile += 1
+    if game_id:
+        for f in glob.glob("/bacchus/media/{}/*.jpg".format(game_id)):
+            os.remove(f)
+            nfile += 1
 
-    return {'file_removed': nfile}
+    return {"file_removed": nfile}
 
 
 @triton.get("/audio/info/{audioID}")
-async def get_audio_stream_init_info(audioID: str = Path(default=..., title="media category")):
+async def get_audio_stream_init_info(
+    audioID: str = Path(default=..., title="media category")
+):
     return {"data": audioID}
+
 
 @triton.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -133,38 +151,45 @@ async def websocket_endpoint(websocket: WebSocket):
             message = await websocket.receive_text()
             messData = json.loads(message)
             logging.debug(message)
-            
-            message_type = messData['type']
-            fileID = messData['file']
-            
-            if (message_type == "init"):
+
+            message_type = messData["type"]
+            fileID = messData["file"]
+
+            if message_type == "init":
                 with IRIS_CONN.cursor() as cursor:
-                    cursor.execute("SELECT length FROM iris.track WHERE file = %s", (fileID,))
+                    cursor.execute(
+                        "SELECT length FROM iris.track WHERE file = %s", (fileID,)
+                    )
                     audioLength = cursor.fetchone()[0]
                     logging.debug(audioLength)
 
                 trackSessionData = {
-                    "type" : "init",
-                    "nchunk" : audioLength // 10000 + 1,
-                    "chunkLength" : 10,
-                    "audioLength" : audioLength
+                    "type": "init",
+                    "nchunk": audioLength // 10000 + 1,
+                    "chunkLength": 10,
+                    "audioLength": audioLength,
                 }
-                
-                await manager.send_personal_message(json.dumps(trackSessionData), websocket)
-            elif (message_type == "chunk"):
-                gameID = messData['game']
-                chunkIdx = messData['chunk']
-                
-                if chunkIdx == 20000: 
-                        threading.Thread(target=increment_listen_count, args=(fileID,)).start()
 
-                
+                await manager.send_personal_message(
+                    json.dumps(trackSessionData), websocket
+                )
+            elif message_type == "chunk":
+                gameID = messData["game"]
+                chunkIdx = messData["chunk"]
+
+                if chunkIdx == 20000:
+                    threading.Thread(
+                        target=increment_listen_count, args=(fileID,)
+                    ).start()
+
                 audioID = uuid.UUID(fileID).hex
-                audio_bytes = pathlib.Path(f"/bacchus/audio/{gameID}/{audioID}/{chunkIdx}").read_bytes()
-                chunk_id_bytes = messData['chunk'].to_bytes(4, byteorder='big')
-                message = chunk_id_bytes +  audio_bytes
+                audio_bytes = pathlib.Path(
+                    f"/bacchus/audio/{gameID}/{audioID}/{chunkIdx}"
+                ).read_bytes()
+                chunk_id_bytes = messData["chunk"].to_bytes(4, byteorder="big")
+                message = chunk_id_bytes + audio_bytes
                 await manager.send_personal_message(message, websocket)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        await manager.broadcast(f"Client # left the chat")
+        await manager.broadcast("Client # left the chat")

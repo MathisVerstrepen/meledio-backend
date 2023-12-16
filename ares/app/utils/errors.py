@@ -38,3 +38,9 @@ def raiseAuthFailed() -> None:
         detail="Invalid authentication credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+def raiseInvalidBody() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid body",
+    )

@@ -1,14 +1,11 @@
 import logging
 import logging.handlers
-import psycopg2
+import psycopg
 
 base_logger = logging.getLogger("uvicorn")
 base_logger.setLevel(logging.INFO)
 base_handler = logging.handlers.RotatingFileHandler(
-    "app/logs/ares.log", 
-    maxBytes=10000000, 
-    backupCount=5, 
-    encoding="utf-8"
+    "app/logs/ares.log", maxBytes=10000000, backupCount=5, encoding="utf-8"
 )
 
 base_formatter = logging.Formatter("%(asctime)s -- %(levelname)s -- %(message)s")
@@ -24,9 +21,9 @@ def get_database_logger():
     # Configuration du handler pour écrire les logs dans un fichier
     sql_handler = logging.handlers.RotatingFileHandler(
         filename="app/logs/sql_debug.log",
-        maxBytes=1048576,  # 1 Mo
-        backupCount=5,
-        encoding="utf-8"
+        maxBytes=10485760,  # 10 Mo
+        backupCount=1,
+        encoding="utf-8",
     )
 
     # Configuration du formatter pour les logs SQL
@@ -36,15 +33,23 @@ def get_database_logger():
     # Ajout du handler au logger
     sql_logger.addHandler(sql_handler)
 
-    # Utilisation du logger personnalisé dans votre classe LoggingCursor
-    class LoggingCursor(psycopg2.extensions.cursor):
-        def execute(self, sql, args=None):
-            sql_logger.info(self.mogrify(sql, args))
+    # Utilisation du logger personnalisé dans votre classe LoggingConnection
+    class LoggingConnection(psycopg.Connection):
+        def cursor(self, *args, **kwargs):
+            return super().cursor(*args, **kwargs, cursor_factory=LoggingCursor)
+
+    class LoggingCursor(psycopg.Cursor):
+        def execute(self, query, params=None, *, prepare=None):
+            formatted_query = self.connection.mogrify(query, params)
+            sql_logger.info(formatted_query.decode())
 
             try:
-                psycopg2.extensions.cursor.execute(self, sql, args)
+                super().execute(query, params, prepare=prepare)
             except Exception as exc:
-                sql_logger.error("%s: %s" % (exc.__class__.__name__, exc))
+                sql_logger.error("%s: %s", exc.__class__.__name__, exc)
                 raise
-            
-    return sql_logger, LoggingCursor
+
+    return sql_logger, LoggingConnection
+
+# Utilisation de LoggingConnection lors de la connexion à la base de données
+# Exemple : conn = psycopg.connect(dsn="your_dsn", connection_factory=LoggingConnection)
