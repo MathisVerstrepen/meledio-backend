@@ -1,5 +1,4 @@
 import json
-import requests
 import httpx
 
 from app.internal.errors.youtube_exceptions import YoutubeChaptersExtractorError
@@ -15,7 +14,7 @@ from app.internal.Youtube.chapters.extractors import (
 from app.utils.loggers import base_logger as logger
 
 
-def save_chapters_to_file(chapters: list, videoID: str, gameID: str) -> None:
+def save_chapters_to_file(chapters: list, video_id: str, game_id: str) -> None:
     """Save chapters to file
 
     Args:
@@ -23,12 +22,12 @@ def save_chapters_to_file(chapters: list, videoID: str, gameID: str) -> None:
         filename (str): Filename
     """
 
-    filepath = f"/bacchus/chapters/{videoID}.json"
+    filepath = f"/bacchus/chapters/{video_id}.json"
 
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             json_data = {
-                "gameID": gameID,
+                "gameID": game_id,
                 "chapters": chapters,
             }
             json.dump(json_data, f)
@@ -43,8 +42,8 @@ class VideoChaptersExtractor:
         self.video_id = video_id
         self.game_id = game_id
 
-        self.yt_initial_data = None
         self.continuation_token = None
+        self.yt_initial_data = None
 
         with open(
             "/ares/app/config/youtube_comments_body.json", "r", encoding="utf-8"
@@ -68,26 +67,23 @@ class VideoChaptersExtractor:
 
             try:
                 self.continuation_token = (
-                    self.yt_initial_data.get("contents", {})
-                    .get("twoColumnWatchNextResults", {})
-                    .get("results", {})
-                    .get("results", {})
-                    .get("contents", {})[-1]
-                    .get("itemSectionRenderer", {})
-                    .get("contents", {})[0]
-                    .get("continuationItemRenderer", {})
-                    .get("continuationEndpoint", {})
-                    .get("continuationCommand", {})
-                    .get("token")
+                    self.yt_initial_data["contents"]
+                    ["twoColumnWatchNextResults"]
+                    ["results"]
+                    ["results"]
+                    ["contents"][-1]
+                    ["itemSectionRenderer"]
+                    ["contents"][0]
+                    ["continuationItemRenderer"]
+                    ["continuationEndpoint"]
+                    ["continuationCommand"]
+                    ["token"]
                 )
-                if not self.continuation_token:
-                    raise YoutubeChaptersExtractorError(
-                        "Error while extracting continuation token", "0003", 500
-                    )
-            except Exception as exc:
-                raise YoutubeChaptersExtractorError(
-                    "Error while extracting continuation token", "0003", 500
-                ) from exc
+            except (KeyError, IndexError):
+                # Continuation token can be missing if the video has no comments
+                logger.warning(
+                    "Error while extracting continuation token, comments are probably disabled"
+                )
 
     async def extract_chapters(self) -> list:
         """Get chapters from video
@@ -98,26 +94,22 @@ class VideoChaptersExtractor:
 
         chapters = None
 
-        # Try to extract chapters from the video info
-        try:
-            logger.info("Extracting chapters from video info")
-            chapters = self.extract_chapters_from_video_info()
+        logger.info("Extracting chapters from video info")
+        chapters = self.extract_chapters_from_video_info()
 
-            if not chapters:
-                logger.info("Extracting chapters from description")
-                chapters = self.extract_chapters_from_description()
+        if not chapters:
+            logger.info("Extracting chapters from description")
+            chapters = self.extract_chapters_from_description()
 
-            if not chapters:
-                logger.info("Extracting chapters from comments")
-                chapters = await self.extract_chapters_from_comments()
+        if (not chapters) and (self.continuation_token):
+            logger.info("Extracting chapters from comments")
+            chapters = await self.extract_chapters_from_comments()
 
-            if not chapters:
-                logger.info("No chapters found")
-                raise Exception
-        except Exception as exc:
+        if not chapters:
+            logger.warning("No chapters found")
             raise YoutubeChaptersExtractorError(
                 "Error while extracting chapters from video info", "0004", 500
-            ) from exc
+            )
 
         logger.info("Found %s chapters", len(chapters))
         save_chapters_to_file(chapters, self.video_id, self.game_id)
@@ -216,8 +208,8 @@ class VideoChaptersExtractor:
             )
 
             for comment in comments:
-                isComment = comment.get("commentThreadRenderer")
-                if not isComment:
+                is_comment = comment.get("commentThreadRenderer")
+                if not is_comment:
                     continue
 
                 comment = (

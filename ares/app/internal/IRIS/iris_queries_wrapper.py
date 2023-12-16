@@ -32,7 +32,6 @@ class Iris:
         game_id = game_data[0]["id"]
         game_name = game_data[0]["name"]
         logger.info("Adding game [%s] to database.", game_id)
-        logger.info("game_existence : %s", game_existence)
         
         async with connectors.iris_aconn.transaction():
 

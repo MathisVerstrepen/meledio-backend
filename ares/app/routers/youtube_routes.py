@@ -52,6 +52,8 @@ async def get_chapters(
     mediaID: str,
     mediaType: str,
 ) -> dict:
+    logger.info("Getting chapters for media ID [%s] and game ID [%s].", mediaID, gameID)
+    
     if mediaType == "video":
         res = await youtube_client.get_video_chapters(mediaID, gameID)
     elif mediaType == "playlist":

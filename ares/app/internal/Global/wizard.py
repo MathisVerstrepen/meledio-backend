@@ -60,6 +60,8 @@ class Wizard:
     def __init__(self, game_name: str, task: Task = None) -> None:
         self.game_name = game_name
         self.game_id = None
+        self.matching_medias = None
+        self.media = None
         self.media_id = None
         self.media_type = None
         self.album_id = None
@@ -196,40 +198,62 @@ class Wizard:
         self.game_name = game_data.get("name")
         release_date: datetime.date = game_data.get("first_release_date")
 
-        matching_medias = await youtube_client.video_match(self.game_name, release_date)
-        videos = matching_medias.get("videos", [])
-        playlists = matching_medias.get("playlists", [])
+        self.matching_medias = await youtube_client.video_match(self.game_name, release_date)
+        self.extract_top_media()
+            
+    def extract_top_media(self):
+        videos = self.matching_medias.get("videos", [])
+        playlists = self.matching_medias.get("playlists", [])
 
         if len(videos) == 0 and len(playlists) == 0:
             raise YoutubeInfoExtractorError("No matching videos found")
 
         if len(videos) > 0 and len(playlists) > 0:
             if videos[0].get("score") > playlists[0].get("score"):
-                self.media_id = videos[0].get("id")
+                video = videos.pop(0)
+                self.media = video
+                self.media_id = video.get("id")
                 self.media_type = "video"
             else:
-                self.media_id = playlists[0].get("id")
+                playlist = playlists.pop(0)
+                self.media = playlist
+                self.media_id = playlist.get("id")
                 self.media_type = "playlist"
 
         elif len(videos) > 0:
-            self.media_id = videos[0].get("id")
+            video = videos.pop(0)
+            self.media = video
+            self.media_id = video.get("id")
             self.media_type = "video"
 
         elif len(playlists) > 0:
-            self.media_id = playlists[0].get("id")
+            playlist = playlists.pop(0)
+            self.media = playlist
+            self.media_id = playlist.get("id")
             self.media_type = "playlist"
 
     async def get_chapters(self):
-        if self.media_type == "video":
-            chapters = await youtube_client.get_video_chapters(
-                self.media_id, self.game_id
-            )
-        elif self.media_type == "playlist":
-            chapters = await youtube_client.get_playlist_chapters(
-                self.media_id, self.game_id
-            )
-        else:
-            raise InvalidBody("mediaType must be either video or playlist")
+        chapters = None
+        start_score = self.media.get("score")
+        logger.info("[Chapters] Trying with media ID [%s]", self.media_id)
+        while not chapters:
+            if self.media_type == "video":
+                chapters = await youtube_client.get_video_chapters(
+                    self.media_id, self.game_id
+                )
+            elif self.media_type == "playlist":
+                chapters = await youtube_client.get_playlist_chapters(
+                    self.media_id, self.game_id
+                )
+            else:
+                raise InvalidBody("mediaType must be either video or playlist")
+
+            logger.info("[Chapters] Found %s chapters", len(chapters))
+
+            if chapters is None:
+                self.extract_top_media()
+                if start_score * 0.9 > self.media.get("score"):
+                    break
 
         if chapters is None:
             raise GenericError("No chapters found")
