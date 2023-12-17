@@ -1,8 +1,9 @@
 import random
 import os
 import httpx
+import asyncio
 
-from app.utils.loggers import base_logger
+from app.utils.loggers import base_logger as logger
 
 from app.utils.connection import REDIS_GLOBAL
 from app.internal.utilities.json import unload_json
@@ -13,7 +14,6 @@ from app.internal.errors.igdb_exceptions import (
 )
 
 from app.internal.Youtube.youtube_const import PROXIES
-
 
 
 class IGDB_Request:
@@ -30,7 +30,6 @@ class IGDB_Request:
         }
 
     def get_igdb_token(self):
-        # token = REDIS_GLOBAL.json().get("IGDB_TOKEN", "$.access_token")
         token = REDIS_GLOBAL.get("IGDB_TOKEN")
 
         if not token:
@@ -52,7 +51,7 @@ class IGDB_Request:
         return token
 
     def refresh_igdb_token(self):
-        base_logger.info("Refreshing IGDB token.")
+        logger.info("Refreshing IGDB token.")
         try:
             response = httpx.post(
                 "https://id.twitch.tv/oauth2/token",
@@ -66,12 +65,11 @@ class IGDB_Request:
 
             response.raise_for_status()
             data = response.json()
-            # REDIS_GLOBAL.json().set("IGDB_TOKEN", "$", data["access_token"])
             REDIS_GLOBAL.set("IGDB_TOKEN", data["access_token"])
 
             return data["access_token"]
         except httpx.HTTPError as e:
-            base_logger.error("Error while refreshing IGDB token: %s", e)
+            logger.error("Error while refreshing IGDB token: %s", e)
             return None
 
     async def get(self, endpoint: str, data: str):
@@ -109,7 +107,7 @@ class IGDB_Request:
         for attempt in range(max_retries):
             try:
                 proxy = random.choice(PROXIES)
-                async with httpx.AsyncClient(proxies = proxy) as client:
+                async with httpx.AsyncClient(proxies=proxy) as client:
                     igdb_res = await client.get(
                         f"https://images.igdb.com/igdb/image/upload/t_{size}/{img_hash}.jpg",
                         headers=self.req_header,
@@ -122,11 +120,20 @@ class IGDB_Request:
                     return igdb_res.content
 
             except (httpx.HTTPError, IGDBInvalidReponseCode):
-                if attempt < max_retries - 1:
+                if attempt < max_retries:
+                    logger.warning(
+                        "Error while getting image [%s] from IGDB. Retrying. Attempt: %s",
+                        img_hash,
+                        attempt,
+                    )
+                    await asyncio.sleep(1)
                     continue
                 else:
+                    logger.error(
+                        "Error while getting image [%s] from IGDB. Max retries reached.",
+                        img_hash,
+                    )
                     raise
-
 
 
 igdb_request = IGDB_Request()

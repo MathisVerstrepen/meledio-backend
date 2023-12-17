@@ -95,10 +95,8 @@ async def igdb_image_downloader(field: str, image_id: str, game_id: str) -> str:
                 blur_hashs.append(blur_hash)
                 
             break
-        except Exception as e:
-            logger.error(
-                "An error occurred while downloading image %s. Error: %s", image_id, e
-            )
+        except Exception:
+            pass
 
     if blur_hashs:
         return blur_hashs[-1]
