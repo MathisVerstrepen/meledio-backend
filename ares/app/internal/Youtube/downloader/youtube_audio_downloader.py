@@ -82,6 +82,8 @@ class YoutubeAudioDownloader:
             video_id (str, optional): _description_. Defaults to None.
         """
         
+        logger.info("[Downloader] Using backup downloader for video %s", video_id)
+        
         proxy = PROXIES[random.randint(0, len(PROXIES) - 1)]
 
         cmd = [
@@ -139,11 +141,14 @@ class YoutubeAudioDownloader:
         Args:
             video_id (str, optional): Video ID. Defaults to None.
         """
+        
         if video_id is None:
             video_id = self.videoID
             filepath = self.filepath
         else:
             filepath = f"{self.dir_path}/{video_id}.opus"
+            
+        logger.info("[Downloader] Downloading audio for video %s", video_id)
             
         proxy = PROXIES[random.randint(0, len(PROXIES) - 1)]
 
@@ -308,31 +313,21 @@ class YoutubeAudioDownloader:
     async def download_playlist(self) -> None:
         """Download all the audio of a playlist and save it in /bacchus/audio/tmp as an .opus file."""
 
-        loop = asyncio.get_event_loop()
-
-        queue = asyncio.Queue()
-
+        semaphore = asyncio.Semaphore(8)
+        tasks = []
+            
+        async def downloader_with_semaphore(semaphore, video_id):
+            async with semaphore:
+                await self.download_audio_sync(video_id)
+                
         for video_id in self.video_ids:
-            queue.put_nowait(video_id)
+            task = downloader_with_semaphore(semaphore, video_id)
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        async def worker():
-            while not queue.empty():
-                video_id = await queue.get()
-                try:
-                    await self.download_audio_sync(video_id)
-                except YoutubeDownloadError as exc:
-                    print(f"Error while downloading video {video_id}: {exc}")
-                except Exception as exc:
-                    print(f"Unexpected error while downloading video {video_id}: {exc}")
-                    raise
-                queue.task_done()
-
-        tasks = [loop.create_task(worker()) for _ in range(10)]
-
-        await queue.join()
-        for task in tasks:
-            task.cancel()
-
-        await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
 
         logger.info("Finished downloading audio for playlist %s", self.playlistID)
