@@ -53,8 +53,7 @@ class Youtube:
             await video_chapters_extractor.extract_initial_data()
             chapters = await video_chapters_extractor.extract_chapters()
 
-        except Exception as e:
-            logger.error("Error while extracting chapters from video: %s", e)
+        except Exception:
             return None
 
         return chapters
@@ -74,12 +73,7 @@ class Youtube:
             playlist_chapters_extractor = PlaylistChaptersExtractor(playlistID, gameID)
             chapters = await playlist_chapters_extractor.extract_chapters()
 
-        except Exception as e:
-            logger.error(
-                "Error while extracting chapters from playlist: %s %s",
-                e,
-                traceback.format_exc(),
-            )
+        except Exception:
             return None
 
         return chapters
@@ -114,7 +108,7 @@ class Youtube:
 
         complete_task()
 
-        logger.info("Audio downloaded for playlist ID %s.", playlistID)
+        logger.info("Finished downloading playlist [%s].", playlistID)
 
     async def align_chapters(self, videoID: str, computeGraph: bool) -> None:
         """Align the chapters of a video

@@ -12,13 +12,13 @@ import app.connectors as connectors
 from app.internal.errors.global_exceptions import (
     InvalidBody,
     ObjectNotFound,
-    GenericError,
 )
-from app.internal.errors.youtube_exceptions import YoutubeInfoExtractorError
+from app.internal.errors.youtube_exceptions import YoutubeInfoExtractorError, YoutubeChaptersExtractorError
 from app.internal.errors.iris_exceptions import ObjectAlreadyExistsError
 from app.internal.utilities.task import Task
 
 from app.utils.loggers import base_logger as logger
+
 
 class Report:
     def __init__(self, total: int) -> None:
@@ -31,23 +31,25 @@ class Report:
         self.games = []
 
     async def init_file(self):
-        self.file = await aiofiles.open(f"/bacchus/reports/wizard/{self.report_id}.json", mode="w")
-        
-    async def save (self):
+        self.file = await aiofiles.open(
+            f"/bacchus/reports/wizard/{self.report_id}.json", mode="w"
+        )
+
+    async def save(self):
         await self.init_file()
-        
+
         final_data = {
-            "report_id": self.report_id, 
+            "report_id": self.report_id,
             "n_success": self.n_success,
             "n_error": self.n_error,
             "n_total": self.n_total,
             "creation_date": self.creation_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "games": self.games
+            "games": self.games,
         }
-        
+
         await self.file.write(json.dumps(final_data))
         await self.file.close()
-        
+
     async def add_report(self, game_report: dict, success: bool):
         self.games.append(game_report)
         if success:
@@ -55,6 +57,7 @@ class Report:
         else:
             self.n_error += 1
         await self.save()
+
 
 class Wizard:
     def __init__(self, game_name: str, task: Task = None) -> None:
@@ -165,9 +168,8 @@ class Wizard:
             self.error = "[Add album to database] " + str(e)
             logger.error(traceback.format_exc())
             raise
-        
-        self.status = "Success"
 
+        self.status = "Success"
 
     async def get_matching_games(self):
         matching_games = await igdb_client.get_matching_games(self.game_name, 5)
@@ -181,7 +183,9 @@ class Wizard:
         game_existence = await connectors.iris_dal.check_game_existence(self.game_id)
 
         if game_existence == 2:
-            album_existence = await connectors.iris_dal.check_album_existence(self.game_id)
+            album_existence = await connectors.iris_dal.check_album_existence(
+                self.game_id
+            )
             if album_existence:
                 raise ObjectAlreadyExistsError("Album already exists in database.")
             raise ObjectAlreadyExistsError("Game already exists in database.")
@@ -198,9 +202,11 @@ class Wizard:
         self.game_name = game_data.get("name")
         release_date: datetime.date = game_data.get("first_release_date")
 
-        self.matching_medias = await youtube_client.video_match(self.game_name, release_date)
+        self.matching_medias = await youtube_client.video_match(
+            self.game_name, release_date
+        )
         self.extract_top_media()
-            
+
     def extract_top_media(self):
         videos = self.matching_medias.get("videos", [])
         playlists = self.matching_medias.get("playlists", [])
@@ -235,8 +241,8 @@ class Wizard:
     async def get_chapters(self):
         chapters = None
         start_score = self.media.get("score")
-        logger.info("[Chapters] Trying with media ID [%s]", self.media_id)
         while not chapters:
+            logger.info("[Chapters] Trying with media ID [%s]", self.media_id)
             if self.media_type == "video":
                 chapters = await youtube_client.get_video_chapters(
                     self.media_id, self.game_id
@@ -248,15 +254,21 @@ class Wizard:
             else:
                 raise InvalidBody("mediaType must be either video or playlist")
 
-            logger.info("[Chapters] Found %s chapters", len(chapters))
-
             if chapters is None:
                 self.extract_top_media()
-                if start_score * 0.9 > self.media.get("score"):
+                logger.info(
+                    "[Chapters] No chapters found, trying with media ID [%s]",
+                    self.media_id,
+                )
+                if (start_score * 0.9 > self.media.get("score")) and (
+                    start_score - 1 > self.media.get("score")
+                ):
                     break
 
         if chapters is None:
-            raise GenericError("No chapters found")
+            raise YoutubeChaptersExtractorError("No chapters found")
+
+        logger.info("[Chapters] Found %s chapters", len(chapters))
 
     def end_download(self):
         pass
@@ -286,11 +298,11 @@ class Wizard:
 async def multiple_wizard(game_name_list: list, task: Task):
     number_step = len(game_name_list["gameList"])
     current_step = 0
-    
+
     report = Report(number_step)
 
     def update_task_progress():
-        """Updates the progress of a task. 
+        """Updates the progress of a task.
 
         Args:
             step (int): Progress step
@@ -308,12 +320,12 @@ async def multiple_wizard(game_name_list: list, task: Task):
         except Exception as e:
             task.add_error(e, game_name)
             error = str(e)
-            
+
         game_report = {
             "game_name": game_name,
             "game_id": wizard.game_id,
             "status": wizard.status,
-            "error": error
+            "error": error,
         }
         await report.add_report(game_report, error is None)
 

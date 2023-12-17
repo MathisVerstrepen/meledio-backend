@@ -37,7 +37,7 @@ class YoutubeVideoMatcher:
 
         youtube_body = self.youtube_body.copy()
         youtube_body["query"] = query_endpoint
-        
+
         async with httpx.AsyncClient() as client:
             r = await client.post(
                 YT_SEARCH_URL,
@@ -81,9 +81,9 @@ class YoutubeVideoMatcher:
             try:
                 ytPlaylistName = r.text.split("<title>")[1].split("</title>")[0]
 
-                ytInitialData = r.text.split("var ytInitialData = ")[1].split(";</script>")[
-                    0
-                ]
+                ytInitialData = r.text.split("var ytInitialData = ")[1].split(
+                    ";</script>"
+                )[0]
                 ytInitialData = json.loads(ytInitialData)
             except Exception as exc:
                 raise YoutubeInfoExtractorError(
@@ -130,7 +130,7 @@ class YoutubeVideoMatcher:
         Returns:
             dict: Best matching video
         """
-        
+
         if release_date:
             release_year = str(release_date.year)
             game_name = game_name + release_year
@@ -138,7 +138,10 @@ class YoutubeVideoMatcher:
         query_endpoints = [str(game_name + query) for query in self.search_urls_end]
 
         # Créer et exécuter des tâches asynchrones
-        tasks = [self.extract_search_requests_data(query_endpoint) for query_endpoint in query_endpoints]
+        tasks = [
+            self.extract_search_requests_data(query_endpoint)
+            for query_endpoint in query_endpoints
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         outputs = [result[0 : min(10, len(result))] for result in results]
@@ -170,11 +173,11 @@ class YoutubeVideoMatcher:
                         if video_data_table.get(videoId):
                             video_data_table[videoId][0] += n_videos - index
                         else:
-                            video_data_table[videoId] = [
-                                n_videos - index,
-                                title,
-                                duration,
-                            ]
+                            video_data_table[videoId] = {
+                                "score": n_videos - index,
+                                "title": title,
+                                "duration": duration,
+                            }
                     except Exception:
                         continue
 
@@ -222,8 +225,10 @@ class YoutubeVideoMatcher:
             )
 
         # Sort the final output by score and return the top 5
-        final_video_data_table_sorted = (
-            sorted(video_data_table.items(), key=lambda tup: tup[1][0], reverse=True)
+        final_video_data_table_sorted = sorted(
+            video_data_table.items(), 
+            key=lambda tup: tup[1]["score"], 
+            reverse=True
         )[0 : min(5, len(video_data_table))]
 
         final_playlist_data_table = (
@@ -239,9 +244,9 @@ class YoutubeVideoMatcher:
             return_value["videos"].append(
                 {
                     "id": video[0],
-                    "title": video[1][1],
-                    "duration": video[1][2],
-                    "score": video[1][0],
+                    "title": video[1]["title"],
+                    "duration": video[1]["duration"],
+                    "score": video[1]["score"],
                 }
             )
 

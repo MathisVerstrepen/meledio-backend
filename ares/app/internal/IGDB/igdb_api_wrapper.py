@@ -6,6 +6,8 @@ from app.internal.IGDB.igdb_request import igdb_request
 
 from app.internal.IGDB.igdb_utils import detect_year_in_name
 
+from app.utils.loggers import base_logger as logger
+
 
 class IGDB:
     """IGDB related functions"""
@@ -26,7 +28,14 @@ class IGDB:
         clean_input = input_string.lower()
         year, clean_input = detect_year_in_name(clean_input)
 
-        data = f'fields name; search "{clean_input}";'
+        logger.info("Searching for game [%s] of year [%s].", clean_input, year)
+
+        if year is None:
+            data = f'fields name; search "{clean_input}";'
+        else:
+            unix_start = datetime(year, 1, 1).timestamp()
+            unix_end = datetime(year, 12, 31).timestamp()
+            data = f'fields name; search "{clean_input}"; where first_release_date >= {unix_start} & first_release_date <= {unix_end};'
 
         parsed_igdb_res = await self.igdb_request.get("games", data)
 
@@ -44,7 +53,7 @@ class IGDB:
 
         if year is not None:
             for game in matching_game_sort:
-                game_release_date = await self.get_game_release_dates(game["id"])
+                game_release_date = await self.get_game_first_release_date(game["id"])
                 if game_release_date is None or len(game_release_date) == 0:
                     continue
 
@@ -119,7 +128,7 @@ class IGDB:
 
         return parsed_igdb_res
 
-    async def get_game_release_dates(self, game_id: int) -> list:
+    async def get_game_first_release_date(self, game_id: int) -> list:
         """Get game release dates from IGDB API
 
         Args:
@@ -129,10 +138,9 @@ class IGDB:
             list: List of release dates
         """
 
-        data = f"""fields date, platform.name, platform.slug;
-                    where game={game_id};"""
+        data = f"""fields first_release_date; where id={game_id};"""
 
-        parsed_igdb_res = await self.igdb_request.get("release_dates", data)
+        parsed_igdb_res = await self.igdb_request.get("games", data)
 
         return parsed_igdb_res
 
