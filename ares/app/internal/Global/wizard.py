@@ -60,13 +60,14 @@ class Report:
 
 
 class Wizard:
-    def __init__(self, game_name: str, task: Task = None) -> None:
+    def __init__(self, game_name: str = None, task: Task = None, media: str = None, game_id: str = None) -> None:
         self.game_name = game_name
-        self.game_id = None
+        self.game_id = game_id
         self.matching_medias = None
-        self.media = None
-        self.media_id = None
-        self.media_type = None
+        self.media = media
+        self.media_id = media.get("id") if media else None
+        self.media_type = media.get("type") if media else None
+        self.media_title = media.get("title") if media else None
         self.album_id = None
         self.tracks = None
 
@@ -80,56 +81,72 @@ class Wizard:
         """Starts the wizard."""
         self.status = "Started"
 
-        logger.info("[Wizard] Starting wizard for [%s]", self.game_name)
+        logger.info("[Wizard] Starting wizard for [%s]", self.game_name or self.game_id)
 
-        # Get matching games
-        logger.info("[Wizard] Matching games for [%s]", self.game_name)
-        try:
-            await self.get_matching_games()
-        except Exception as e:
-            self.status = "Failed"
-            self.error = "[Matching games] " + str(e)
-            logger.error(traceback.format_exc())
-            raise
-
-        logger.info("[Wizard] Adding game data for [%s]", self.game_id)
-        # Add game data
-        try:
-            await self.add_game_data()
-        except ObjectAlreadyExistsError as e:
-            if e.message == "Album already exists in database.":
+        if self.game_id is None:
+            # Get matching games
+            logger.info("[Wizard] Matching games for [%s]", self.game_name or self.game_id)
+            try:
+                await self.get_matching_games()
+            except Exception as e:
                 self.status = "Failed"
-                self.error = "[Album data] Album already exists in database."
+                self.error = "[Matching games] " + str(e)
+                logger.error(traceback.format_exc())
                 raise
-            else:
-                self.warn = "[Game data] Game already exists in database."
-        except ObjectNotFound:
-            self.status = "Failed"
-            self.error = "[Game data] Game not found in IGDB."
-            logger.error(traceback.format_exc())
-            raise
 
-        logger.info("[Wizard] Matching videos for [%s]", self.game_name)
-        # Get matching videos
-        try:
-            await self.get_matching_videos()
-        except Exception as e:
-            self.status = "Failed"
-            self.error = "[Matching videos] " + str(e)
-            logger.error(traceback.format_exc())
-            raise
+            logger.info("[Wizard] Adding game data for [%s]", self.game_name or self.game_id)
+            # Add game data
+            try:
+                await self.add_game_data()
+            except ObjectAlreadyExistsError as e:
+                if e.message == "Album already exists in database.":
+                    self.status = "Failed"
+                    self.error = "[Album data] Album already exists in database."
+                    raise
+                else:
+                    self.warn = "[Game data] Game already exists in database."
+            except ObjectNotFound:
+                self.status = "Failed"
+                self.error = "[Game data] Game not found in IGDB."
+                logger.error(traceback.format_exc())
+                raise
 
-        logger.info("[Wizard] Getting chapters for [%s]", self.game_name)
-        # Get chapters
-        try:
-            await self.get_chapters()
-        except Exception as e:
-            self.status = "Failed"
-            self.error = "[Chapters] " + str(e)
-            logger.error(traceback.format_exc())
-            raise
+            logger.info("[Wizard] Matching videos for [%s]", self.game_name or self.game_id)
+            # Get matching videos
+            try:
+                await self.get_matching_videos()
+            except Exception as e:
+                self.status = "Failed"
+                self.error = "[Matching videos] " + str(e)
+                logger.error(traceback.format_exc())
+                raise
+        elif self.media_id is None:
+            raise InvalidBody("media_id must be provided if game_id is provided")
 
-        logger.info("[Wizard] Downloading videos for [%s]", self.game_name)
+        if not self.media:
+            logger.info("[Wizard] Getting chapters for [%s]", self.game_name or self.game_id)
+            # Get chapters
+            try:
+                await self.get_chapters()
+            except Exception as e:
+                self.status = "Failed"
+                self.error = "[Chapters] " + str(e)
+                logger.error(traceback.format_exc())
+                raise
+        else:
+            if self.media_type == "video":
+                chapters = await youtube_client.get_video_chapters(
+                    self.media_id, self.game_id
+                )
+            elif self.media_type == "playlist":
+                chapters = await youtube_client.get_playlist_chapters(
+                    self.media_id, self.game_id
+                )
+                
+            if chapters is None:
+                raise YoutubeChaptersExtractorError("No chapters found")
+
+        logger.info("[Wizard] Downloading videos for [%s]", self.game_name or self.game_id)
         # Download videos
         try:
             await self.download_media()
@@ -139,7 +156,7 @@ class Wizard:
             logger.error(traceback.format_exc())
             raise
 
-        logger.info("[Wizard] Aligning videos for [%s]", self.game_name)
+        logger.info("[Wizard] Aligning videos for [%s]", self.game_name or self.game_id)
         # Align videos
         try:
             self.align_videos()
@@ -149,7 +166,7 @@ class Wizard:
             logger.error(traceback.format_exc())
             raise
 
-        logger.info("[Wizard] Segmenting videos for [%s]", self.game_name)
+        logger.info("[Wizard] Segmenting videos for [%s]", self.game_name or self.game_id)
         # Segment videos
         try:
             await self.segment_videos()
@@ -159,7 +176,7 @@ class Wizard:
             logger.error(traceback.format_exc())
             raise
 
-        logger.info("[Wizard] Adding album to database for [%s]", self.game_name)
+        logger.info("[Wizard] Adding album to database for [%s]", self.game_name or self.game_id)
         # Add album to database
         try:
             await self.add_album_to_database()
@@ -220,23 +237,27 @@ class Wizard:
                 self.media = video
                 self.media_id = video.get("id")
                 self.media_type = "video"
+                self.media_title = video.get("title")
             else:
                 playlist = playlists.pop(0)
                 self.media = playlist
                 self.media_id = playlist.get("id")
                 self.media_type = "playlist"
+                self.media_title = playlist.get("title")
 
         elif len(videos) > 0:
             video = videos.pop(0)
             self.media = video
             self.media_id = video.get("id")
             self.media_type = "video"
+            self.media_title = video.get("title")
 
         elif len(playlists) > 0:
             playlist = playlists.pop(0)
             self.media = playlist
             self.media_id = playlist.get("id")
             self.media_type = "playlist"
+            self.media_title = playlist.get("title")
 
     async def get_chapters(self):
         chapters = None
@@ -313,7 +334,7 @@ async def multiple_wizard(game_name_list: list, task: Task):
         task.update_task_progress(current_step * 100 / number_step)
 
     for game_name in game_name_list["gameList"]:
-        wizard = Wizard(game_name, task)
+        wizard = Wizard(game_name, task = task)
         error = None
         try:
             await wizard.start()
@@ -324,6 +345,9 @@ async def multiple_wizard(game_name_list: list, task: Task):
         game_report = {
             "game_name": game_name,
             "game_id": wizard.game_id,
+            "media_id": wizard.media_id,
+            "media_type": wizard.media_type,
+            "media_title": wizard.media_title,
             "status": wizard.status,
             "error": error,
         }

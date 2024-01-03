@@ -220,6 +220,18 @@ async def add_new_game_bulk_list_wizard(request: Request) -> dict:
 
     return jsonable_encoder(task.toDict())
 
+@router.post("/games/wizard/{game_id}/force-media")
+@require_valid_token
+async def add_new_game_wizard_force_media(request: Request, game_id: str) -> dict:
+    logger.info("Starting forced wizard for game [%s]", game_id)
+    
+    media_data = await request.json()
+
+    game_wizard = Wizard(game_id = game_id, media = media_data)
+    await game_wizard.start()
+
+    return {"data": "ok"}
+
 
 @router.post("/games/wizard/{game_name}")
 @require_valid_token
