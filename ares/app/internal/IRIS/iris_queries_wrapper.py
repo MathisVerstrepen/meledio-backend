@@ -1,5 +1,6 @@
 import json
 import requests
+from typing import Literal
 
 # from app.internal.IRIS.data_access_layer.iris_dal_main import IRIS_DAL
 from app.internal.utilities.files import delete_folder, delete_file
@@ -11,8 +12,6 @@ from app.internal.errors.global_exceptions import ObjectNotFound
 from app.internal.errors.iris_exceptions import SQLError
 
 from app.utils.loggers import base_logger as logger
-
-
 class Iris:
     """General IRIS API queries wrapper"""
 
@@ -32,11 +31,10 @@ class Iris:
         game_id = game_data[0]["id"]
         game_name = game_data[0]["name"]
         logger.info("Adding game [%s] to database.", game_id)
-        
-        async with connectors.iris_aconn.transaction():
 
+        async with connectors.iris_aconn.transaction():
             new_game_dal = self.iris_dal.IrisDalNewGame(self.iris_dal, game_id)
-            
+
             if game_existence == 0:
                 await new_game_dal.add_new_game_root_data(game_id, game_name)
 
@@ -48,11 +46,17 @@ class Iris:
 
                 match field_type:
                     case "base":
-                        await new_game_dal.add_base_data(field_sql_identifier, field_data)
+                        await new_game_dal.add_base_data(
+                            field_sql_identifier, field_data
+                        )
                     case "date":
-                        await new_game_dal.add_date_data(field_sql_identifier, field_data)
+                        await new_game_dal.add_date_data(
+                            field_sql_identifier, field_data
+                        )
                     case "parent":
-                        await new_game_dal.add_parent_data(field_sql_identifier, field_data)
+                        await new_game_dal.add_parent_data(
+                            field_sql_identifier, field_data
+                        )
                     case "extra":
                         await new_game_dal.add_extra_data(
                             field_sql_identifier,
@@ -76,14 +80,18 @@ class Iris:
                             field_sql_identifier, field, field_data
                         )
                     case "normal":
-                        await new_game_dal.add_normalized_data(field_sql_identifier, field_data)
+                        await new_game_dal.add_normalized_data(
+                            field_sql_identifier, field_data
+                        )
                     case "association_table":
                         await new_game_dal.add_association_table_data(
-                            field_sql_identifier, field_data, field_schema_data.get("association_table")
+                            field_sql_identifier,
+                            field_data,
+                            field_schema_data.get("association_table"),
                         )
-                        
+
             await new_game_dal.finalize_game()
-            
+
         await new_game_dal.commit_changes()
 
         logger.info("Game [%s] added to database.", game_id)
@@ -123,7 +131,7 @@ class Iris:
             dict: Base game data
         """
 
-        return await self.iris_dal.get_base_game_data(game_id)
+        return await self.iris_dal.get_full_game_data(game_id)
 
     async def add_game_tracks(
         self, game_id: int, album_id: str, tracks: list, video_id: str
@@ -145,6 +153,26 @@ class Iris:
             )
             delete_folder(f"/bacchus/audio/{game_id}/{curent_main_album_id}")
 
-        await self.iris_dal.add_game_tracks(game_id, album_id, tracks, "youtube", video_id)
+        await self.iris_dal.add_game_tracks(
+            game_id, album_id, tracks, "youtube", video_id
+        )
 
         delete_file(f"/bacchus/audio/tmp/{video_id}.opus")
+
+    async def get_games_sorted(
+        self,
+        sort_type: Literal["rating", "random", "recent"],
+        sort_order: Literal["asc", "desc"],
+        offset: int,
+        limit: int
+    ) -> list:
+        """Get games sorted by a specific type (rating, random, recent)
+
+        Args:
+            sort_type (str): Field to sort by
+
+        Returns:
+            list: Games data
+        """
+
+        return await self.iris_dal.get_games_sorted(sort_type, sort_order, offset, limit)

@@ -30,6 +30,11 @@ from app.internal.IRIS.iris_db_connection import IrisAsyncConnection
 from app.internal.IRIS.data_access_layer.iris_dal_main import IrisDataAccessLayer
 from app.internal.IRIS.iris_queries_wrapper import Iris
 
+from app.routers import games_routes
+from app.routers import youtube_routes
+from app.routers import task_routes
+from app.routers import public_routes
+
 import app.connectors as connectors
 
 from app.utils.loggers import base_logger as logger
@@ -68,17 +73,10 @@ ares.state.limiter = limiter
 ares.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-from app.routers import games_routes
-
 ares.include_router(games_routes.router)
-
-from app.routers import youtube_routes
-
 ares.include_router(youtube_routes.router)
-
-from app.routers import task_routes
-
 ares.include_router(task_routes.router)
+ares.include_router(public_routes.router)
 
 
 # ------------------ IGDB EXCEPTION HANDLERS ---------------------- #

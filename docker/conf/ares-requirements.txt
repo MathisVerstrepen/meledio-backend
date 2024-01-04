@@ -23,19 +23,13 @@ psycopg[binary]
 redis
 
 # Outils de Développement et Debugging
-ddtrace
 mypy
-rich
 
 # Bibliothèques de Sciences de Données et Mathématiques
 numpy
-scipy
-scikit-learn
-statsmodels
 
 # Traitement de Fichiers et IO Asynchrone
 aiofiles
-pydub
 soundfile
 
 # Visualisation de Données
@@ -48,6 +42,5 @@ webdriver-manager
 yt_dlp
 
 # Autres
-random_user_agent
 slowapi
 typing

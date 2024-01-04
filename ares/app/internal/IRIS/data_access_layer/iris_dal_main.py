@@ -65,7 +65,9 @@ class IrisDataAccessLayer:
 
                 else:
                     query = sql.SQL(
-                        """UPDATE iris.game 
+                        """
+                        --begin-sql
+                        UPDATE iris.game 
                             SET category = null, collection_id = null, 
                                 complete = false, first_release_date = null, parent_game = null, 
                                 rating = null, slug = null, summary = null 
@@ -81,24 +83,136 @@ class IrisDataAccessLayer:
             await self.aconn.rollback()
             raise SQLError(f"Error while deleting game ID {game_id}") from exc
 
-    async def get_base_game_data(self, game_id: int) -> dict:
+    async def get_categories_by_game_id(self, game_id: int) -> list:
+        """Get categories of a game by game ID
+
+        Args:
+            game_id (int): Game ID
+
+        Raises:
+            SQLError: Error while getting categories
+
+        Returns:
+            list: List of categories
+        """
         try:
             async with self.aconn.cursor() as curs:
                 query = sql.SQL(
-                    """SELECT
+                    """--begin-sql
+                    SELECT
+                        t.id,
+                        t.name,
+                        t.slug
+                    FROM
+                        iris.theme t
+                    LEFT JOIN
+                        iris.game_theme gt 
+                            ON
+                        gt.theme_id = t.id
+                    WHERE
+                        gt.game_id = %s;"""
+                )
+                data = (game_id,)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting categories") from exc
+
+    async def get_full_game_data(self, game_id: int) -> dict:
+        """ Get full game data from database
+
+        Args:
+            game_id (int): Game ID
+            sort_type (str, optional): Sort type. Defaults to "default". 
+                Possible values: "default", "random", "recent", "rating".
+
+        Raises:
+            SQLError: Error while getting full game data
+
+        Returns:
+            dict: Full game data (
+                id, name, complete, cover_id, cover_hash, parent_game, collection_id, collection_name,
+                first_release_date, rating, popularity, summary, type, main_album_id
+            )
+        """        
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql    
+                    SELECT
                         g.id,
                         g.name,
-                        g.slug,
                         g.complete,
+                        m.image_id AS cover_id,
+                        m.blur_hash AS cover_hash,
                         g.parent_game,
-                        g.category,
                         g.collection_id,
+                        c2.name AS collection_name,
                         g.first_release_date,
-                        g.rating,
+                        round(g.rating::numeric, 2) AS rating,
                         g.popularity,
-                        g.summary
+                        g.summary,
+                        c.name AS TYPE,
+                        a.id AS main_album_id
                     FROM
                         iris.game g
+                    LEFT JOIN
+                        iris.media m 
+                            ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        a.game_id = g.id
+                        AND a.is_main
+                        AND a.is_visible
+                    LEFT JOIN
+                        iris.category c 
+                            ON
+                        c.id = g.category
+                    LEFT JOIN 
+                        iris.collection c2 
+                            ON
+                        c2.id = g.collection_id 
+                    WHERE
+                        g.id = %s;
+                """
+                )
+                data = (game_id,)
+
+                await curs.execute(query, data)
+                res = await curs.fetchone()
+                
+                res["categories"] = await self.get_categories_by_game_id(game_id)
+                
+                return res
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting base game data") from exc
+
+    async def get_reduced_game_data(self, game_id: int) -> dict:
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        g.id,
+                        g.name,
+                        m.image_id as cover_id,
+                        m.blur_hash as cover_hash,
+                        a.id as album_id
+                    FROM
+                        iris.game g
+                    LEFT JOIN
+                        iris.media m 
+                            on m.game_id = g.id
+                            and m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            on a.game_id = g.id
+                            and a.is_main 
+                            and a.is_visible 
                     WHERE
                         g.id = %s;"""
                 )
@@ -200,3 +314,7 @@ class IrisDataAccessLayer:
             await self.aconn.rollback()
             logger.error(traceback.format_exc())
             raise SQLError("Error while adding game tracks") from exc
+
+    async def get_games_sorted(self, sort_type, sort_order, offset, limit):
+        # TODO
+        return None
