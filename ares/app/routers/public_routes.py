@@ -28,7 +28,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # ------------------ GAMES ---------------------- #
 
 
-@router.get("/games/sort/", tags=["games"])
+@router.get("/games/sort", tags=["games"])
 @limiter.limit("30/minute")
 async def get_games_sorted(
     request: Request,
@@ -49,9 +49,6 @@ async def get_games_sorted(
     games_data = await connectors.iris_query_wrapper.get_games_sorted(
         sort_type, sort_order, offset, limit
     )
-
-    if not games_data:
-        raise ObjectNotFound("Games not found.")
 
     return games_data
 

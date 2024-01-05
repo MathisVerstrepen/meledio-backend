@@ -1,6 +1,6 @@
 import json
-import requests
 from typing import Literal
+import requests
 
 # from app.internal.IRIS.data_access_layer.iris_dal_main import IRIS_DAL
 from app.internal.utilities.files import delete_folder, delete_file
@@ -12,6 +12,8 @@ from app.internal.errors.global_exceptions import ObjectNotFound
 from app.internal.errors.iris_exceptions import SQLError
 
 from app.utils.loggers import base_logger as logger
+
+
 class Iris:
     """General IRIS API queries wrapper"""
 
@@ -163,8 +165,8 @@ class Iris:
         self,
         sort_type: Literal["rating", "random", "recent"],
         sort_order: Literal["asc", "desc"],
-        offset: int,
-        limit: int
+        offset: int = 0,
+        limit: int = 20,
     ) -> list:
         """Get games sorted by a specific type (rating, random, recent)
 
@@ -175,4 +177,12 @@ class Iris:
             list: Games data
         """
 
-        return await self.iris_dal.get_games_sorted(sort_type, sort_order, offset, limit)
+        sort_type_map = {
+            "rating": "g.rating",
+            "random": "random()",
+            "recent": "g.first_release_date",
+        }
+
+        return await self.iris_dal.get_games_sorted(
+            sort_type_map[sort_type], sort_order, offset, limit
+        )

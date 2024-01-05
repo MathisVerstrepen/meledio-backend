@@ -1,4 +1,5 @@
 import traceback
+from typing import Literal
 from slugify import slugify
 from psycopg import Error as psycopg_Error, sql
 
@@ -120,11 +121,11 @@ class IrisDataAccessLayer:
             raise SQLError("Error while getting categories") from exc
 
     async def get_full_game_data(self, game_id: int) -> dict:
-        """ Get full game data from database
+        """Get full game data from database
 
         Args:
             game_id (int): Game ID
-            sort_type (str, optional): Sort type. Defaults to "default". 
+            sort_type (str, optional): Sort type. Defaults to "default".
                 Possible values: "default", "random", "recent", "rating".
 
         Raises:
@@ -135,7 +136,7 @@ class IrisDataAccessLayer:
                 id, name, complete, cover_id, cover_hash, parent_game, collection_id, collection_name,
                 first_release_date, rating, popularity, summary, type, main_album_id
             )
-        """        
+        """
         try:
             async with self.aconn.cursor() as curs:
                 query = sql.SQL(
@@ -184,9 +185,9 @@ class IrisDataAccessLayer:
 
                 await curs.execute(query, data)
                 res = await curs.fetchone()
-                
+
                 res["categories"] = await self.get_categories_by_game_id(game_id)
-                
+
                 return res
         except psycopg_Error as exc:
             raise SQLError("Error while getting base game data") from exc
@@ -315,6 +316,65 @@ class IrisDataAccessLayer:
             logger.error(traceback.format_exc())
             raise SQLError("Error while adding game tracks") from exc
 
-    async def get_games_sorted(self, sort_type, sort_order, offset, limit):
-        # TODO
-        return None
+    async def get_games_sorted(
+        self,
+        sort_type: Literal["g.rating", "random()", "g.first_release_date"],
+        sort_order: Literal["asc", "desc"],
+        offset: int,
+        limit: int,
+    ) -> list:
+        """Get reduced games sorted by a specific type (rating, random, recent)
+            by a specific order (asc, desc)
+
+        Args:
+            sort_type (str): Field to sort by
+            sort_order (str): Sort order
+            offset (int): Offset
+            limit (int): Limit
+
+        Raises:
+            SQLError: Error while getting games data
+
+        Returns:
+            list: Reduced games data
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql    
+                    SELECT
+                        g.id,
+                        g.name,
+                        m.image_id AS cover_id,
+                        m.blur_hash AS cover_hash,
+                        a.id AS main_album_id
+                    FROM
+                        iris.game g
+                    LEFT JOIN
+                        iris.media m 
+                            ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        a.game_id = g.id
+                        AND a.is_main
+                        AND a.is_visible
+                    WHERE 
+                        g.complete 
+                    ORDER BY {sort_type} {sort_order}
+                    OFFSET %s
+                    LIMIT %s;
+                    """
+                )
+                query = query.format(
+                    sort_type=sql.SQL(sort_type),
+                    sort_order=sql.SQL(sort_order),
+                )
+                data = (offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting base game data") from exc

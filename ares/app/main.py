@@ -133,9 +133,7 @@ async def ObjectAlreadyExistsError_handler(
 @ares.exception_handler(SQLError)
 async def SQLError_handler(request: Request, exc: SQLError):
     logger.error(exc.message)
-    return JSONResponse(
-        status_code=500, content={"detail": "Error while inserting data to database"}
-    )
+    return JSONResponse(status_code=500, content={"detail": exc.message})
 
 
 @ares.exception_handler(DatabaseCommitError)
