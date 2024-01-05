@@ -7,7 +7,6 @@ from app.internal.utilities.files import delete_folder, delete_file
 
 import app.connectors as connectors
 
-from app.internal.errors.iris_exceptions import DatabaseCommitError
 from app.internal.errors.global_exceptions import ObjectNotFound
 from app.internal.errors.iris_exceptions import SQLError
 
@@ -132,8 +131,11 @@ class Iris:
         Returns:
             dict: Base game data
         """
+        base_data = await self.iris_dal.get_full_game_data(game_id)
+        
+        base_data["categories"] = await self.iris_dal.get_categories_by_game_id(game_id)
 
-        return await self.iris_dal.get_full_game_data(game_id)
+        return base_data
 
     async def add_game_tracks(
         self, game_id: int, album_id: str, tracks: list, video_id: str

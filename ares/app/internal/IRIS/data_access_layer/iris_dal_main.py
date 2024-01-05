@@ -12,6 +12,7 @@ import app.connectors as connectors
 
 
 class IrisDataAccessLayer:
+    """ Class for IRIS Data Access Layer to the database """
     IrisDalNewGame = IrisDalNewGame
 
     def __init__(self) -> None:
@@ -84,42 +85,6 @@ class IrisDataAccessLayer:
             await self.aconn.rollback()
             raise SQLError(f"Error while deleting game ID {game_id}") from exc
 
-    async def get_categories_by_game_id(self, game_id: int) -> list:
-        """Get categories of a game by game ID
-
-        Args:
-            game_id (int): Game ID
-
-        Raises:
-            SQLError: Error while getting categories
-
-        Returns:
-            list: List of categories
-        """
-        try:
-            async with self.aconn.cursor() as curs:
-                query = sql.SQL(
-                    """--begin-sql
-                    SELECT
-                        t.id,
-                        t.name,
-                        t.slug
-                    FROM
-                        iris.theme t
-                    LEFT JOIN
-                        iris.game_theme gt 
-                            ON
-                        gt.theme_id = t.id
-                    WHERE
-                        gt.game_id = %s;"""
-                )
-                data = (game_id,)
-
-                await curs.execute(query, data)
-                return await curs.fetchall()
-        except psycopg_Error as exc:
-            raise SQLError("Error while getting categories") from exc
-
     async def get_full_game_data(self, game_id: int) -> dict:
         """Get full game data from database
 
@@ -184,11 +149,70 @@ class IrisDataAccessLayer:
                 data = (game_id,)
 
                 await curs.execute(query, data)
-                res = await curs.fetchone()
+                return await curs.fetchone()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting base game data") from exc
 
-                res["categories"] = await self.get_categories_by_game_id(game_id)
+    async def get_games_sorted(
+        self,
+        sort_type: Literal["g.rating", "random()", "g.first_release_date"],
+        sort_order: Literal["asc", "desc"],
+        offset: int,
+        limit: int,
+    ) -> list:
+        """Get reduced games sorted by a specific type (rating, random, recent)
+            by a specific order (asc, desc)
 
-                return res
+        Args:
+            sort_type (str): Field to sort by
+            sort_order (str): Sort order
+            offset (int): Offset
+            limit (int): Limit
+
+        Raises:
+            SQLError: Error while getting games data
+
+        Returns:
+            list: Reduced games data
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql    
+                    SELECT
+                        g.id,
+                        g.name,
+                        m.image_id AS cover_id,
+                        m.blur_hash AS cover_hash,
+                        a.id AS main_album_id
+                    FROM
+                        iris.game g
+                    LEFT JOIN
+                        iris.media m 
+                            ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        a.game_id = g.id
+                        AND a.is_main
+                        AND a.is_visible
+                    WHERE 
+                        g.complete 
+                    ORDER BY {sort_type} {sort_order}
+                    OFFSET %s
+                    LIMIT %s;
+                    """
+                )
+                query = query.format(
+                    sort_type=sql.SQL(sort_type),
+                    sort_order=sql.SQL(sort_order),
+                )
+                data = (offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting base game data") from exc
 
@@ -223,6 +247,42 @@ class IrisDataAccessLayer:
                 return await curs.fetchone()
         except psycopg_Error as exc:
             raise SQLError("Error while getting base game data") from exc
+
+    async def get_categories_by_game_id(self, game_id: int) -> list:
+        """Get categories of a game by game ID
+
+        Args:
+            game_id (int): Game ID
+
+        Raises:
+            SQLError: Error while getting categories
+
+        Returns:
+            list: List of categories
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        t.id,
+                        t.name,
+                        t.slug
+                    FROM
+                        iris.theme t
+                    LEFT JOIN
+                        iris.game_theme gt 
+                            ON
+                        gt.theme_id = t.id
+                    WHERE
+                        gt.game_id = %s;"""
+                )
+                data = (game_id,)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting categories") from exc
 
     async def get_next_album_id(self):
         try:
@@ -316,65 +376,3 @@ class IrisDataAccessLayer:
             logger.error(traceback.format_exc())
             raise SQLError("Error while adding game tracks") from exc
 
-    async def get_games_sorted(
-        self,
-        sort_type: Literal["g.rating", "random()", "g.first_release_date"],
-        sort_order: Literal["asc", "desc"],
-        offset: int,
-        limit: int,
-    ) -> list:
-        """Get reduced games sorted by a specific type (rating, random, recent)
-            by a specific order (asc, desc)
-
-        Args:
-            sort_type (str): Field to sort by
-            sort_order (str): Sort order
-            offset (int): Offset
-            limit (int): Limit
-
-        Raises:
-            SQLError: Error while getting games data
-
-        Returns:
-            list: Reduced games data
-        """
-        try:
-            async with self.aconn.cursor() as curs:
-                query = sql.SQL(
-                    """--begin-sql    
-                    SELECT
-                        g.id,
-                        g.name,
-                        m.image_id AS cover_id,
-                        m.blur_hash AS cover_hash,
-                        a.id AS main_album_id
-                    FROM
-                        iris.game g
-                    LEFT JOIN
-                        iris.media m 
-                            ON
-                        m.game_id = g.id
-                        AND m.type = 'cover'
-                    LEFT JOIN
-                        iris.album a 
-                            ON
-                        a.game_id = g.id
-                        AND a.is_main
-                        AND a.is_visible
-                    WHERE 
-                        g.complete 
-                    ORDER BY {sort_type} {sort_order}
-                    OFFSET %s
-                    LIMIT %s;
-                    """
-                )
-                query = query.format(
-                    sort_type=sql.SQL(sort_type),
-                    sort_order=sql.SQL(sort_order),
-                )
-                data = (offset, limit)
-
-                await curs.execute(query, data)
-                return await curs.fetchall()
-        except psycopg_Error as exc:
-            raise SQLError("Error while getting base game data") from exc
