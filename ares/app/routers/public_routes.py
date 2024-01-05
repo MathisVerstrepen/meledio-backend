@@ -41,7 +41,10 @@ async def get_games_sorted(
 
     Args:
         request (Request): FastAPI Request object
-        sort_type (str): Field to sort by
+        sort_type (Annotated[str, Query, optional): Sort type (rating, random, recent)
+        sort_order (Annotated[str, Query, optional): Sort order (asc, desc)
+        offset (int): offset in results (default 0)
+        limit (int): limit of results (default 10, max 50)
 
     Returns:
         JSONResponse: JSON response with games data
@@ -52,6 +55,56 @@ async def get_games_sorted(
 
     return games_data
 
+
+@router.get("/games/{game_id}/top-tracks", tags=["games"])
+@limiter.limit("30/minute")
+async def get_game_top_tracks(
+    request: Request,
+    game_id: int,
+    offset: Annotated[int, Query(..., ge=0)] = 0,
+    limit: Annotated[int, Query(..., ge=1, le=50)] = 10,
+):  # pylint: disable=unused-argument
+    """Get game top tracks by game ID
+
+    Args:
+        request (Request): FastAPI Request object
+        game_id (int): Game ID
+        offset (int): offset in results (default 0)
+        limit (int): limit of results (default 10, max 50)
+    Raises:
+        ObjectNotFound: _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    game_top_tracks = await connectors.iris_query_wrapper.get_game_top_tracks(
+        game_id, offset, limit
+    )
+
+    return game_top_tracks
+
+@router.get("/games/{game_id}/albums", tags=["games"])
+@limiter.limit("30/minute")
+async def get_games_albums(
+    request: Request,
+    game_id: int,
+):  # pylint: disable=unused-argument
+    """Get game albums by game ID
+
+    Args:
+        request (Request): FastAPI Request object
+        game_id (int): Game ID
+
+    Returns:
+        _type_: _description_
+    """
+
+    game_albums = await connectors.iris_query_wrapper.get_games_albums(
+        game_id
+    )
+
+    return game_albums
 
 @router.get("/games/{game_id}", tags=["games"])
 @limiter.limit("30/minute")

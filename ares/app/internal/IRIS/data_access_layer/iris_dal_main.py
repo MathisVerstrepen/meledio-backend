@@ -12,7 +12,8 @@ import app.connectors as connectors
 
 
 class IrisDataAccessLayer:
-    """ Class for IRIS Data Access Layer to the database """
+    """Class for IRIS Data Access Layer to the database"""
+
     IrisDalNewGame = IrisDalNewGame
 
     def __init__(self) -> None:
@@ -284,6 +285,94 @@ class IrisDataAccessLayer:
         except psycopg_Error as exc:
             raise SQLError("Error while getting categories") from exc
 
+    async def get_game_top_tracks(self, game_id: int, offset: int, limit: int) -> list:
+        """Get top tracks of a game by game ID
+
+        Args:
+            game_id (int): Game ID
+
+        Raises:
+            SQLError: Error while getting top tracks
+
+        Returns:
+            list: List of top tracks
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT 
+                        t.id AS track_id,
+                        at2.album_id,
+                        t.title,
+                        t.slug,
+                        t.file_id AS mpd,
+                        t.like_count,
+                        t.play_count,
+                        t.last_played,
+                        t.length
+                    FROM 
+                        iris.track t 
+                    LEFT JOIN
+                        iris.album_track at2 
+                        ON
+                        at2.track_id = t.id
+                    INNER JOIN 
+                        iris.album a 
+                        ON
+                        a.id = at2.album_id 
+                        AND 
+                        a.is_main 
+                    WHERE
+                        t.game_id = %s
+                    ORDER BY 
+	                    t.play_count desc
+                    OFFSET %s
+                    LIMIT %s;"""
+                )
+                data = (game_id, offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting top tracks") from exc
+
+    async def get_games_albums(self, game_id: int) -> list:
+        """Get the list of albums of a game by its ID
+
+        Args:
+            game_id (int): Game ID
+
+        Raises:
+            SQLError: Error while getting albums
+
+        Returns:
+            list: List of albums
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        a.id AS album_id,
+                        a."name" ,
+                        a.slug ,
+                        a.is_certified ,
+                        a.is_main ,
+                        a.created_at ,
+                        a.like_count
+                    FROM
+                        iris.album a 
+                    WHERE 
+                        a.game_id  = %s;"""
+                )
+                data = (game_id,)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting albums") from exc
+
     async def get_next_album_id(self):
         try:
             async with self.aconn.cursor() as curs:
@@ -375,4 +464,3 @@ class IrisDataAccessLayer:
             await self.aconn.rollback()
             logger.error(traceback.format_exc())
             raise SQLError("Error while adding game tracks") from exc
-

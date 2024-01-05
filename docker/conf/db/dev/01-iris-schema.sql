@@ -97,6 +97,7 @@ CREATE TABLE iris.album (
     "game_id" int NOT NULL,
     "name" text NOT NULL,
     "slug" text NOT NULL,
+    "like_count" int NOT NULL DEFAULT 0,
     "is_main" boolean NOT NULL DEFAULT false,
     "is_certified" boolean NOT NULL DEFAULT false,
     "is_visible" boolean NOT NULL DEFAULT true,

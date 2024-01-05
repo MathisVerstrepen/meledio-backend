@@ -188,3 +188,25 @@ class Iris:
         return await self.iris_dal.get_games_sorted(
             sort_type_map[sort_type], sort_order, offset, limit
         )
+
+    async def get_game_top_tracks(self, game_id: int, offset: int, limit: int):
+        """Get game top tracks
+
+        Args:
+            game_id (int): Game ID
+
+        Returns:
+            list: Game top tracks
+        """
+        return await self.iris_dal.get_game_top_tracks(game_id, offset, limit)
+    
+    async def get_games_albums(self, game_id: int):
+        """Get game albums
+
+        Args:
+            game_id (int): Game ID
+
+        Returns:
+            list: Game albums
+        """
+        return await self.iris_dal.get_games_albums(game_id)
