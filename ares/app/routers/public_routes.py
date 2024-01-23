@@ -75,7 +75,7 @@ async def get_game_top_tracks(
         ObjectNotFound: _description_
 
     Returns:
-        _type_: _description_
+        List[dict]: List of top tracks
     """
 
     game_top_tracks = await connectors.iris_query_wrapper.get_game_top_tracks(
@@ -95,9 +95,9 @@ async def get_games_albums(
     Args:
         request (Request): FastAPI Request object
         game_id (int): Game ID
-
+        
     Returns:
-        _type_: _description_
+        List[dict]: List of game albums
     """
 
     game_albums = await connectors.iris_query_wrapper.get_games_albums(
@@ -105,6 +105,31 @@ async def get_games_albums(
     )
 
     return game_albums
+
+@router.get("/games/{game_id}/related-games", tags=["games"])
+@limiter.limit("30/minute")
+async def get_game_related_games(
+    request: Request,
+    game_id: int,
+    offset: Annotated[int, Query(..., ge=0)] = 0,
+    limit: Annotated[int, Query(..., ge=1, le=50)] = 10,
+):
+    """Get game related games by game ID
+
+    Args:
+        request (Request): FastAPI Request object
+        game_id (int): Game ID
+        offset (int): offset in results (default 0)
+        limit (int): limit of results (default 10, max 50)
+
+    Returns:
+        List[dict]: List of related games
+    """
+    game_related_games = await connectors.iris_query_wrapper.get_game_related_games(
+        game_id, offset, limit
+    )
+
+    return game_related_games
 
 @router.get("/games/{game_id}", tags=["games"])
 @limiter.limit("30/minute")

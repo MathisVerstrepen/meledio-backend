@@ -210,3 +210,16 @@ class Iris:
             list: Game albums
         """
         return await self.iris_dal.get_games_albums(game_id)
+    
+    async def get_game_related_games(self, game_id: int, offset: int, limit: int):
+        """Get game related games
+
+        Args:
+            game_id (int): Game ID
+            offset (int): offset in results (default 0)
+            limit (int): limit of results (default 10, max 50)
+
+        Returns:
+            list: Game related games
+        """
+        return await self.iris_dal.get_game_related_games(game_id, offset, limit)

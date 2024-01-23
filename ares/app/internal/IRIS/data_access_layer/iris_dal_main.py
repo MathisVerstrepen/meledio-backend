@@ -373,6 +373,54 @@ class IrisDataAccessLayer:
         except psycopg_Error as exc:
             raise SQLError("Error while getting albums") from exc
 
+    async def get_game_related_games(
+        self, game_id: int, offset: int, limit: int
+    ) -> list:
+        """Get related games of a game by game ID
+
+        Args:
+            game_id (int): Game ID
+
+        Raises:
+            SQLError: Error while getting related games
+
+        Returns:
+            list: List of related games
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        ec.extra_id,
+                        g.name,
+                        m.image_id AS cover_id,
+                        m.blur_hash AS cover_hash,
+                        a.id AS main_album_id
+                    FROM
+                        iris.extra_content AS ec
+                    LEFT JOIN iris.game g ON
+                        g.id = ec.extra_id 
+                    LEFT JOIN iris.media m ON
+                        m.game_id = ec.extra_id 
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        ec.extra_id  = a.game_id
+                        AND a.is_main
+                        AND a.is_visible
+                    WHERE ec.game_id = %s AND ec."type" = 'similar_game' 
+                    OFFSET %s
+                    LIMIT %s;"""
+                )
+                data = (game_id, offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting related games") from exc
+
     async def get_next_album_id(self):
         try:
             async with self.aconn.cursor() as curs:
