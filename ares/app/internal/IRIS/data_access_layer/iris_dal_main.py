@@ -512,3 +512,90 @@ class IrisDataAccessLayer:
             await self.aconn.rollback()
             logger.error(traceback.format_exc())
             raise SQLError("Error while adding game tracks") from exc
+
+    async def get_collection_info_by_id(self, collection_id: int) -> dict:
+        """ Data Access Layer method to get collection info by ID
+
+        Args:
+            collection_id (int): The ID of the collection
+            
+        Returns:
+            dict: Collection data
+        """
+        
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        c."name" AS collection_name,
+                        count(DISTINCT(g.id)) AS n_games,
+                        count(at2.track_id) AS n_tracks
+                    FROM
+                        iris.collection c
+                    LEFT JOIN iris.game g 
+                        ON g.collection_id = c.id
+                    LEFT JOIN iris.media m ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        g.id = a.game_id
+                        AND a.is_main
+                        AND a.is_visible
+                    LEFT JOIN 
+                        iris.album_track at2 
+                        ON at2.album_id = a.id 
+                    WHERE c.id = %s
+                    GROUP BY c.name;"""
+                )
+                data = (collection_id, )
+
+                await curs.execute(query, data)
+                return (await curs.fetchall())[0]
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting related games") from exc
+        
+    async def get_collection_reduce_game_info(self, collection_id: int) -> list[dict]:
+        """ Data Access Layer method to get collection minimal game info by ID
+
+        Args:
+            collection_id (int): The ID of the collection
+            
+        Returns:
+            dict: Collection data
+        """
+        
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT
+                        g.id,
+                        g.name,
+                        m.image_id AS cover_id,
+                        m.blur_hash AS cover_hash,
+                        a.id AS main_album_id
+                    FROM
+                        iris.game g
+                    LEFT JOIN
+                        iris.media m 
+                            ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        a.game_id = g.id
+                        AND a.is_main
+                        AND a.is_visible
+                    WHERE 
+                        g.collection_id = %s;"""
+                )
+                data = (collection_id, )
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting related games") from exc

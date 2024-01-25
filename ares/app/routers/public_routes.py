@@ -151,3 +151,22 @@ async def get_game_by_id(
         raise ObjectNotFound("Game not found.")
 
     return game_data
+
+
+@router.get("/collection/{collection_id}", tags=["collection"])
+@limiter.limit("30/minute")
+async def get_collection_by_id(
+    request: Request, collection_id: int
+): # pylint: disable=unused-argument
+    """ Get a collection by its ID
+
+    Args:
+        request (Request): FastAPI Request object
+        collection_id (int): ID of the collection
+    """
+    collection_data = await connectors.iris_query_wrapper.get_collection_by_id(collection_id)
+
+    if not collection_data:
+        raise ObjectNotFound("Collection not found.")
+
+    return collection_data

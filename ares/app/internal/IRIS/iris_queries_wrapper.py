@@ -223,3 +223,19 @@ class Iris:
             list: Game related games
         """
         return await self.iris_dal.get_game_related_games(game_id, offset, limit)
+    
+    async def get_collection_by_id(self, collection_id: int):
+        """Get collection by ID
+
+        Args:
+            collection_id (int): Collection ID
+
+        Returns:
+            dict: Collection data
+        """
+        collection_data = await self.iris_dal.get_collection_info_by_id(collection_id)
+        collection_reduce_game_data = await self.iris_dal.get_collection_reduce_game_info(collection_id)
+        
+        collection_data["games"] = collection_reduce_game_data
+        
+        return collection_data
