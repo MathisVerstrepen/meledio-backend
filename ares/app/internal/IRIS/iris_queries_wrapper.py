@@ -132,7 +132,7 @@ class Iris:
             dict: Base game data
         """
         base_data = await self.iris_dal.get_full_game_data(game_id)
-        
+
         base_data["categories"] = await self.iris_dal.get_categories_by_game_id(game_id)
 
         return base_data
@@ -178,11 +178,11 @@ class Iris:
         Returns:
             list: Games data
         """
-
+        
         sort_type_map = {
-            "rating": "g.rating",
+            "rating": "c.rating",
             "random": "random()",
-            "recent": "g.first_release_date",
+            "recent": "c.creation_date",
         }
 
         return await self.iris_dal.get_games_sorted(
@@ -199,7 +199,7 @@ class Iris:
             list: Game top tracks
         """
         return await self.iris_dal.get_game_top_tracks(game_id, offset, limit)
-    
+
     async def get_games_albums(self, game_id: int):
         """Get game albums
 
@@ -210,7 +210,7 @@ class Iris:
             list: Game albums
         """
         return await self.iris_dal.get_games_albums(game_id)
-    
+
     async def get_game_related_games(self, game_id: int, offset: int, limit: int):
         """Get game related games
 
@@ -223,7 +223,7 @@ class Iris:
             list: Game related games
         """
         return await self.iris_dal.get_game_related_games(game_id, offset, limit)
-    
+
     async def get_collection_by_id(self, collection_id: int):
         """Get collection by ID
 
@@ -234,13 +234,17 @@ class Iris:
             dict: Collection data
         """
         collection_data = await self.iris_dal.get_collection_info_by_id(collection_id)
-        collection_reduce_game_data = await self.iris_dal.get_collection_reduce_game_info(collection_id)
-        
+        collection_reduce_game_data = (
+            await self.iris_dal.get_collection_reduce_game_info(collection_id)
+        )
+
         collection_data["games"] = collection_reduce_game_data
-        
+
         return collection_data
-    
-    async def get_collection_top_tracks(self, collection_id: int, offset: int, limit: int):
+
+    async def get_collection_top_tracks(
+        self, collection_id: int, offset: int, limit: int
+    ):
         """Get collection top tracks
 
         Args:
@@ -251,4 +255,38 @@ class Iris:
         Returns:
             list: Collection top tracks
         """
-        return await self.iris_dal.get_collection_top_tracks(collection_id, offset, limit)
+        return await self.iris_dal.get_collection_top_tracks(
+            collection_id, offset, limit
+        )
+
+    async def get_collections_sorted(
+        self,
+        sort_type: Literal["rating", "random", "recent"],
+        sort_order: Literal["asc", "desc"],
+        offset: int = 0,
+        limit: int = 20,
+    ):
+        """Get collections sorted by a specific type (rating, random, recent)
+
+        Args:
+            sort_type (str): Field to sort by
+
+        Returns:
+            list: Collections data
+        """
+        sort_type_map = {
+            "rating": "avg_rating",
+            "random": "random()",
+            "recent": "latest_game_release_date",
+        }
+
+        collections = await self.iris_dal.get_collections_sorted(
+            sort_type_map[sort_type], sort_order, offset, limit
+        )
+        
+        for collection in collections:
+            collection["games"] = await self.iris_dal.get_collection_reduce_game_info(
+                collection["id"]
+            )
+            
+        return collections

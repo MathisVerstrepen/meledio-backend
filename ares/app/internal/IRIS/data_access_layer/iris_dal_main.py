@@ -514,15 +514,15 @@ class IrisDataAccessLayer:
             raise SQLError("Error while adding game tracks") from exc
 
     async def get_collection_info_by_id(self, collection_id: int) -> dict:
-        """ Data Access Layer method to get collection info by ID
+        """Data Access Layer method to get collection info by ID
 
         Args:
             collection_id (int): The ID of the collection
-            
+
         Returns:
             dict: Collection data
         """
-        
+
         try:
             async with self.aconn.cursor() as curs:
                 query = sql.SQL(
@@ -550,23 +550,23 @@ class IrisDataAccessLayer:
                     WHERE c.id = %s
                     GROUP BY c.name;"""
                 )
-                data = (collection_id, )
+                data = (collection_id,)
 
                 await curs.execute(query, data)
                 return (await curs.fetchall())[0]
         except psycopg_Error as exc:
             raise SQLError("Error while getting related games") from exc
-        
+
     async def get_collection_reduce_game_info(self, collection_id: int) -> list[dict]:
-        """ Data Access Layer method to get collection minimal game info by ID
+        """Data Access Layer method to get collection minimal game info by ID
 
         Args:
             collection_id (int): The ID of the collection
-            
+
         Returns:
             dict: Collection data
         """
-        
+
         try:
             async with self.aconn.cursor() as curs:
                 query = sql.SQL(
@@ -593,23 +593,25 @@ class IrisDataAccessLayer:
                     WHERE 
                         g.collection_id = %s;"""
                 )
-                data = (collection_id, )
+                data = (collection_id,)
 
                 await curs.execute(query, data)
                 return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting related games") from exc
-        
-    async def get_collection_top_tracks(self, collection_id: int, offset: int, limit: int) -> list:
-        """ Data Access Layer method to get collection top tracks by ID
+
+    async def get_collection_top_tracks(
+        self, collection_id: int, offset: int, limit: int
+    ) -> list:
+        """Data Access Layer method to get collection top tracks by ID
 
         Args:
             collection_id (int): The ID of the collection
-            
+
         Returns:
             dict: Collection data
         """
-        
+
         try:
             async with self.aconn.cursor() as curs:
                 query = sql.SQL(
@@ -652,3 +654,69 @@ class IrisDataAccessLayer:
                 return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting top tracks") from exc
+
+    async def get_collections_sorted(
+        self,
+        sort_type: Literal["c.name", "c.n_games", "c.n_tracks"],
+        sort_order: Literal["asc", "desc"],
+        offset: int,
+        limit: int,
+    ) -> list:
+        """Data Access Layer method to get collection sorted by a specific type (name, n_games, n_tracks)
+            by a specific order (asc, desc)
+
+        Args:
+            sort_type (str): Field to sort by
+            sort_order (str): Sort order
+            offset (int): Offset
+            limit (int): Limit
+
+        Raises:
+            SQLError: Error while getting games data
+
+        Returns:
+            list: Reduced games data
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql    
+                    SELECT
+                        c.id,
+                        c.name,
+                        count(DISTINCT(g.id)) AS n_games,
+                        avg(DISTINCT(g.rating)) AS avg_rating,
+                        max(DISTINCT(g.first_release_date)) AS latest_game_release_date,
+                        count(at2.track_id) AS n_tracks
+                    FROM
+                        iris.collection c
+                    LEFT JOIN iris.game g 
+                        ON g.collection_id = c.id
+                    LEFT JOIN iris.media m ON
+                        m.game_id = g.id
+                        AND m.type = 'cover'
+                    LEFT JOIN
+                        iris.album a 
+                            ON
+                        g.id = a.game_id
+                        AND a.is_main
+                        AND a.is_visible
+                    LEFT JOIN 
+                        iris.album_track at2 
+                        ON at2.album_id = a.id 
+                    GROUP BY c.id
+                    ORDER BY random() desc
+                    OFFSET %s
+                    LIMIT %s;
+                    """
+                )
+                query = query.format(
+                    sort_type=sql.SQL(sort_type),
+                    sort_order=sql.SQL(sort_order),
+                )
+                data = (offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting base game data") from exc
