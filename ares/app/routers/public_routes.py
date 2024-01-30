@@ -152,6 +152,30 @@ async def get_game_by_id(
 
     return game_data
 
+@router.get("/collection/{collection_id}/top-tracks", tags=["collection"])
+@limiter.limit("30/minute")
+async def get_collection_top_tracks(
+    request: Request,
+    collection_id: int,
+    offset: Annotated[int, Query(..., ge=0)] = 0,
+    limit: Annotated[int, Query(..., ge=1, le=50)] = 10,
+): # pylint: disable=unused-argument
+    """Get collection top tracks by collection ID
+
+    Args:
+        request (Request): FastAPI Request object
+        collection_id (int): Collection ID
+        offset (int): offset in results (default 0)
+        limit (int): limit of results (default 10, max 50)
+
+    Returns:
+        List[dict]: List of top tracks
+    """
+    collection_top_tracks = await connectors.iris_query_wrapper.get_collection_top_tracks(
+        collection_id, offset, limit
+    )
+
+    return collection_top_tracks
 
 @router.get("/collection/{collection_id}", tags=["collection"])
 @limiter.limit("30/minute")

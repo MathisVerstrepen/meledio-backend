@@ -599,3 +599,56 @@ class IrisDataAccessLayer:
                 return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting related games") from exc
+        
+    async def get_collection_top_tracks(self, collection_id: int, offset: int, limit: int) -> list:
+        """ Data Access Layer method to get collection top tracks by ID
+
+        Args:
+            collection_id (int): The ID of the collection
+            
+        Returns:
+            dict: Collection data
+        """
+        
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT 
+                        t.id AS track_id,
+                        at2.album_id,
+                        t.title,
+                        t.slug,
+                        t.file_id AS mpd,
+                        t.like_count,
+                        t.play_count,
+                        t.last_played,
+                        t.length
+                    FROM
+                        iris.game g 
+                    LEFT JOIN  
+                        iris.track t 
+                        ON t.game_id = g.id 
+                    LEFT JOIN
+                        iris.album_track at2 
+                        ON
+                        at2.track_id = t.id
+                    INNER JOIN 
+                        iris.album a 
+                        ON
+                        a.id = at2.album_id 
+                        AND 
+                        a.is_main 
+                    WHERE
+                        g.collection_id = %s
+                    ORDER BY 
+                        t.play_count desc
+                    OFFSET %s
+                    LIMIT %s;"""
+                )
+                data = (collection_id, offset, limit)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting top tracks") from exc

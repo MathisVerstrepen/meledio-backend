@@ -239,3 +239,16 @@ class Iris:
         collection_data["games"] = collection_reduce_game_data
         
         return collection_data
+    
+    async def get_collection_top_tracks(self, collection_id: int, offset: int, limit: int):
+        """Get collection top tracks
+
+        Args:
+            collection_id (int): Collection ID
+            offset (int): offset in results (default 0)
+            limit (int): limit of results (default 10, max 50)
+
+        Returns:
+            list: Collection top tracks
+        """
+        return await self.iris_dal.get_collection_top_tracks(collection_id, offset, limit)
