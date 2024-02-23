@@ -720,3 +720,78 @@ class IrisDataAccessLayer:
                 return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting base game data") from exc
+
+    async def get_album_details_by_id(self, album_id: str) -> dict:
+        """ Get album details by its ID
+            Does not include tracks
+
+        Args:
+            album_id (str): Album ID
+
+        Raises:
+            SQLError: Error while getting album by ID
+
+        Returns:
+            dict: Album data
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                        SELECT 
+                            a."name",
+                            a.slug,
+                            a.game_id,
+                            a.is_certified,
+                            a.is_main,
+                            a.created_at,
+                            a.like_count
+                        FROM iris.album a 
+                        WHERE a.id = %s;"""
+                )
+                data = (album_id,)
+
+                await curs.execute(query, data)
+                return await curs.fetchone()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting album by ID") from exc
+        
+    async def get_album_tracks_by_id(self, album_id: str) -> list[dict]:
+        """ Get album tracks by its ID
+
+        Args:
+            album_id (str): Album ID
+
+        Raises:
+            SQLError: Error while getting album tracks by ID
+
+        Returns:
+            list: List of album tracks
+        """
+        try:
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """--begin-sql
+                    SELECT 
+                        at2.track_id,
+                        t.title,
+                        t.slug,
+                        t.file_id,
+                        t.like_count,
+                        t.play_count,
+                        t.last_played,
+                        t.length
+                    FROM
+                        iris.album_track at2
+                    LEFT JOIN
+                        iris.track t 
+                        ON at2.track_id = t.id 
+                    WHERE 
+                        at2.album_id = %s;"""
+                )
+                data = (album_id,)
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while getting album tracks by ID") from exc

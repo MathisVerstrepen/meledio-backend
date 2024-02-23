@@ -290,3 +290,18 @@ class Iris:
             )
             
         return collections
+    
+    async def get_album_by_id(self, album_id: str):
+        """Get album by ID
+
+        Args:
+            album_id (str): Album ID
+
+        Returns:
+            dict: Album data
+        """
+        album = await self.iris_dal.get_album_details_by_id(album_id)
+        tracks = await self.iris_dal.get_album_tracks_by_id(album_id)
+        album["tracks"] = tracks
+        
+        return album

@@ -221,3 +221,21 @@ async def get_collection_by_id(
         raise ObjectNotFound("Collection not found.")
 
     return collection_data
+
+@router.get("/album/{album_id}", tags=["album"])
+@limiter.limit("30/minute")
+async def get_album_by_id(
+    request: Request, album_id: int
+): # pylint: disable=unused-argument
+    """ Get an album by its ID
+
+    Args:
+        request (Request): FastAPI Request object
+        album_id (int): ID of the album
+    """
+    album_data = await connectors.iris_query_wrapper.get_album_by_id(album_id)
+
+    if not album_data:
+        raise ObjectNotFound("Album not found.")
+
+    return album_data
