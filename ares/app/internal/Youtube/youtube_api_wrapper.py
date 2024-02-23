@@ -13,6 +13,7 @@ from app.internal.Youtube.chapters.youtube_playlist_chapters import (
     PlaylistChaptersExtractor,
 )
 
+from app.internal.errors.youtube_exceptions import YoutubeDownloadError
 
 from app.utils.loggers import base_logger as logger
 
@@ -88,7 +89,13 @@ class Youtube:
 
         audio_downloader = YoutubeAudioDownloader()
         await audio_downloader.initialize(videoID, "video")
-        await audio_downloader.download_audio_sync()
+        for _ in range(3):
+            try:
+                await audio_downloader.download_audio_sync()
+                break
+            except YoutubeDownloadError:
+                logger.error( "Retrying download for video %s",  videoID)
+                continue
 
         complete_task()
 

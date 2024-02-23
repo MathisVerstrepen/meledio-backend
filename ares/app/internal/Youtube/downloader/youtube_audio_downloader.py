@@ -318,7 +318,13 @@ class YoutubeAudioDownloader:
             
         async def downloader_with_semaphore(semaphore, video_id):
             async with semaphore:
-                await self.download_audio_sync(video_id)
+                for _ in range(3):
+                    try:
+                        await self.download_audio_sync(video_id)
+                        break
+                    except YoutubeDownloadError:
+                        logger.warning("Retrying download for video %s", video_id)
+                        continue
                 
         for video_id in self.video_ids:
             task = downloader_with_semaphore(semaphore, video_id)
