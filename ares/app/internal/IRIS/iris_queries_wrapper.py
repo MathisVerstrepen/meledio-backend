@@ -1,5 +1,6 @@
 import json
 from typing import Literal
+import os
 import requests
 
 # from app.internal.IRIS.data_access_layer.iris_dal_main import IRIS_DAL
@@ -112,8 +113,9 @@ class Iris:
 
         try:
             requests.delete(
-                "http://media.meledio.com/api/games/images",
+                os.getenv("TRITON_HOST") + "/api/games/images",
                 params={"game_id": game_id},
+                headers={"Authorization": "Bearer " + os.getenv("TRITON_TOKEN")},
                 timeout=10,
             )
 

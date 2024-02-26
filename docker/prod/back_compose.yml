@@ -73,6 +73,7 @@ services:
       - ARES_TOKEN=${ARES_TOKEN}
       - BACCHUS_FOLDER=${BACCHUS_FOLDER}
       - REDIS_HOST=atlas_redis_prod
+      - TRITON_TOKEN=${TRITON_TOKEN}
     depends_on:
       iris_db:
         condition: service_healthy
@@ -102,6 +103,7 @@ services:
       - POSTGRES_HOST=iris_db_prod
       - BACCHUS_FOLDER=${BACCHUS_FOLDER}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TRITON_TOKEN=${TRITON_TOKEN}
     depends_on:
       iris_db:
         condition: service_healthy

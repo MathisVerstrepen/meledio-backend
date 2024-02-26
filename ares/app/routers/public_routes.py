@@ -152,6 +152,8 @@ async def get_game_by_id(
 
     return game_data
 
+# ------------------ COLLECTIONS ---------------------- #
+
 @router.get("/collection/{collection_id}/top-tracks", tags=["collection"])
 @limiter.limit("30/minute")
 async def get_collection_top_tracks(
@@ -221,6 +223,8 @@ async def get_collection_by_id(
         raise ObjectNotFound("Collection not found.")
 
     return collection_data
+
+# ------------------ ALBUMS ---------------------- #
 
 @router.get("/album/{album_id}", tags=["album"])
 @limiter.limit("30/minute")

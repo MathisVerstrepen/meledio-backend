@@ -1,7 +1,7 @@
 import os
 
+import logging
 from dotenv import load_dotenv
-
 import psycopg
 from psycopg.rows import dict_row
 
@@ -9,7 +9,8 @@ load_dotenv()
 
 IRIS_HOST = os.getenv("POSTGRES_HOST")
 
-class IrisAsyncConnection():
+
+class IrisAsyncConnection:
     def __init__(self):
         self.conn = None
 
@@ -23,11 +24,13 @@ class IrisAsyncConnection():
                 row_factory=dict_row,
                 autocommit=False,
             )
+            logging.info("Connection to IRIS database established.")
         except psycopg.Error as e:
-            raise e
+            logging.error("Error while connecting to IRIS: %s", e)
 
     async def close(self):
         await self.conn.close()
-        
+        logging.info("Connection to IRIS database closed.")
+
     def get_conn(self):
         return self.conn
