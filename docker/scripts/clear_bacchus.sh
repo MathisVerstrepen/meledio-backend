@@ -19,3 +19,5 @@ rm -rf -- "$BACCHUS_DIR"/$db_type/chapters/*
 # Supprime les fichiers de rapports
 rm -rf -- "$BACCHUS_DIR"/$db_type/reports/*
 mkdir "$BACCHUS_DIR"/$db_type/reports/wizard
+
+echo "Bacchus cleared"

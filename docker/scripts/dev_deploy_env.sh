@@ -28,7 +28,7 @@ mkdir -p "$BACCHUS_DIR"/dev/reports
 mkdir -p "$BACCHUS_DIR"/dev/reports/wizard
 mkdir -p "$PROJECT_DIR"/docker/volumes/dev/db
 
-# Execute the backup script in sudo mode
+# Backup dev database
 sudo bash "$SCRIPTS_DIR"/backup_db.sh iris_db_dev dev
 
 # Stop dev docker compose

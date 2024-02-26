@@ -25,9 +25,9 @@ backup_file="db_backup_$(date +%Y-%m-%d_%H-%M-%S).sql"
 docker exec $container_name pg_dumpall -U postgres > $backup_dir/$backup_file
 
 # Arrête le conteneur Docker PostgreSQL
-docker stop $container_name
+# docker stop $container_name
 
 # Supprime le dossier associé à la base de données
-rm -rf "$SCRIPTS_DIR"/../volumes/$db_type/db
+# rm -rf "$SCRIPTS_DIR"/../volumes/$db_type/db
 
 echo "La sauvegarde de la base de données a été effectuée avec succès."
