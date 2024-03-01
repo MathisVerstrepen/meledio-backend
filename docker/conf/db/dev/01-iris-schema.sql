@@ -719,9 +719,24 @@ $$ LANGUAGE plpgsql;
     Create a function to get search results
     --> SELECT * FROM iris.search_games();
 */
-
-
 CREATE EXTENSION IF NOT EXISTS unaccent;
+
+CREATE OR REPLACE FUNCTION immutable_unaccent(text)
+RETURNS text AS $$
+SELECT unaccent($1)
+$$ LANGUAGE sql IMMUTABLE STRICT;
+
+CREATE INDEX idx_game_name_unaccent ON iris.game (immutable_unaccent(lower(name)));
+CREATE INDEX idx_game_category ON iris.game (category);
+CREATE INDEX idx_game_rating ON iris.game (rating);
+CREATE INDEX idx_game_first_release_date ON iris.game (first_release_date);
+CREATE INDEX idx_involved_companies_game_id ON iris.involved_companies (game_id);
+CREATE INDEX idx_involved_companies_company_id ON iris.involved_companies (company_id);
+CREATE INDEX idx_game_genre_game_id ON iris.game_genre (game_id);
+CREATE INDEX idx_game_genre_genre_id ON iris.game_genre (genre_id);
+CREATE INDEX idx_media_game_id_type ON iris.media (game_id, type);
+
+
 CREATE OR REPLACE FUNCTION iris.search_games(
     _game_name TEXT,
     _category INT[], _company_id INT[], _genre_name TEXT[], 
@@ -753,10 +768,11 @@ BEGIN
             CASE WHEN _order = 6 THEN g.first_release_date END AS sort_date_desc
         FROM iris.game AS g
         LEFT JOIN iris.involved_companies AS ic ON ic.game_id = g.id
-        LEFT JOIN iris.genre AS g2 ON g.id = g2.game_id
+        LEFT JOIN iris.game_genre AS gg ON g.id = gg.game_id
+        LEFT JOIN iris.genre AS g2 ON gg.genre_id = g2.id
         LEFT JOIN (select m.game_id, m.image_id, m.blur_hash from iris.media m where m."type" = 'cover') m ON g.id = m.game_id
         WHERE 
-            (unaccent(lower(g.name)) ILIKE unaccent(lower('%' || _game_name || '%')))
+            (immutable_unaccent(lower(g.name)) ILIKE immutable_unaccent(lower('%' || _game_name || '%')))
             AND (array_length(_category, 1) IS NULL OR g.category = ANY(_category))
             AND ic.developer
             AND (array_length(_company_id, 1) IS NULL OR ic.company_id = ANY(_company_id))

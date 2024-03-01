@@ -19,6 +19,14 @@ class IrisDataAccessLayer:
     def __init__(self) -> None:
         self.aconn = connectors.iris_aconn
         self.new_game = IrisDalNewGame(self)
+        self.order_table = {
+            "name_asc": 1,
+            "name_desc": 2,
+            "rating_asc": 3,
+            "rating_desc": 4,
+            "release_date_asc": 5,
+            "release_date_desc": 6,
+        }
 
     async def check_game_existence(self, game_id: int) -> int:
         """Check if game exists in database
@@ -755,7 +763,7 @@ class IrisDataAccessLayer:
                 return await curs.fetchone()
         except psycopg_Error as exc:
             raise SQLError("Error while getting album by ID") from exc
-        
+
     async def get_album_tracks_by_id(self, album_id: str) -> list[dict]:
         """ Get album tracks by its ID
 
@@ -795,3 +803,48 @@ class IrisDataAccessLayer:
                 return await curs.fetchall()
         except psycopg_Error as exc:
             raise SQLError("Error while getting album tracks by ID") from exc
+
+    async def search(self, search_object: dict) -> list:
+        """Search for games, collections, albums, and tracks
+
+        Args:
+            search_object (dict): Search object containing all search parameters
+
+        Returns:
+            List[dict]: List of search results
+        """
+        try:
+            logger.info("search_object: %s", search_object)
+            async with self.aconn.cursor() as curs:
+                query = sql.SQL(
+                    """SELECT * FROM iris.search_games(
+                        %s::text, 
+                        %s::int[], 
+                        %s::int[], 
+                        %s::text[],
+                        %s::real, 
+                        %s::real, 
+                        %s::date, 
+                        %s::date, 
+                        %s::int, 
+                        %s::int, 
+                        %s::int);"""
+                )
+                data = (
+                    search_object.game_name,
+                    search_object.categories,
+                    search_object.developers,
+                    search_object.genres,
+                    search_object.rating.from_,
+                    search_object.rating.to,
+                    search_object.releaseDate.from_,
+                    search_object.releaseDate.to,
+                    search_object.limit,
+                    search_object.offset,
+                    self.order_table.get(search_object.order, 1),
+                )
+
+                await curs.execute(query, data)
+                return await curs.fetchall()
+        except psycopg_Error as exc:
+            raise SQLError("Error while searching") from exc

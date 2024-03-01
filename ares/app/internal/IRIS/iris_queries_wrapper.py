@@ -3,7 +3,6 @@ from typing import Literal
 import os
 import requests
 
-# from app.internal.IRIS.data_access_layer.iris_dal_main import IRIS_DAL
 from app.internal.utilities.files import delete_folder, delete_file
 
 import app.connectors as connectors
@@ -292,7 +291,7 @@ class Iris:
             )
             
         return collections
-    
+
     async def get_album_by_id(self, album_id: str):
         """Get album by ID
 
@@ -305,5 +304,16 @@ class Iris:
         album = await self.iris_dal.get_album_details_by_id(album_id)
         tracks = await self.iris_dal.get_album_tracks_by_id(album_id)
         album["tracks"] = tracks
-        
+
         return album
+
+    async def search(self, search_object):
+        """Search games by name
+
+        Args:
+            search_object (dict): Search object containing all search parameters
+
+        Returns:
+            list: Search results
+        """
+        return await self.iris_dal.search(search_object)

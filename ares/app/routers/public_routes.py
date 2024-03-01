@@ -1,13 +1,9 @@
-from fastapi import Request, APIRouter, Query
+from typing import Annotated, List, Optional
+from fastapi import Request, APIRouter, Query, Body
 from fastapi.security import OAuth2PasswordBearer
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
 from slowapi.util import get_remote_address
 from slowapi import Limiter
-from typing import Annotated
-
-from app.internal.IGDB.igdb_api_wrapper import igdb_client
-from app.internal.Global.wizard import Wizard, multiple_wizard
+from pydantic import BaseModel, Field, conint, constr
 
 import app.connectors as connectors
 
@@ -243,3 +239,48 @@ async def get_album_by_id(
         raise ObjectNotFound("Album not found.")
 
     return album_data
+
+# ------------------ SEARCH ---------------------- #
+
+class RatingRange(BaseModel):
+    """ Type definition for rating range """
+    from_: float = Field(0, alias="from")
+    to: float = Field(100)
+
+class DateRange(BaseModel):
+    """ Type definition for date range """
+    from_: str = Field("1900-01-01", alias="from", pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    to: str = Field("2100-01-01", pattern="^\\d{4}-\\d{2}-\\d{2}$")
+
+class SearchObject(BaseModel):
+    """ Type definition for search object with all search parameters fields """
+    game_name: Optional[str]
+    categories: List[int] = Field(default_factory=list)
+    developers: List[int] = Field(default_factory=list)
+    genres: List[str] = Field(default_factory=list)
+    rating: RatingRange = Field(default_factory=RatingRange)
+    releaseDate: DateRange = Field(default_factory=DateRange)
+    limit: conint(ge=1, le=100) = 50
+    offset: conint(ge=0) = 0
+    order: Optional[constr(pattern="^(name_asc|name_desc|date_asc|date_desc)$")] = "name_asc"
+
+@router.post("/search", tags=["search"])
+@limiter.limit("30/minute")
+async def search(
+    request: Request,
+    search_object: SearchObject = Body(...),
+):
+    """Search for games, collections, albums, and tracks
+
+    Args:
+        request (Request): FastAPI Request object
+        search_object (Annotated[dict, Query, optional): Search object containing all search parameters
+        
+    Returns:
+        List[dict]: List of search results
+    """
+    search_results = await connectors.iris_query_wrapper.search(
+        search_object
+    )
+
+    return search_results
