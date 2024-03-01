@@ -43,6 +43,15 @@ then
     sudo bash "$SCRIPTS_DIR"/clear_bacchus.sh dev
 fi
 
+# Ask if db should be reset
+read -p "Do you want to reset the database? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    # Reset the database
+    sudo bash "$SCRIPTS_DIR"/reset_db.sh iris_db_dev dev
+fi
+
 # Ask if the ares image should be built
 read -p "Do you want to build the ares image? (y/n) " -n 1 -r
 echo
