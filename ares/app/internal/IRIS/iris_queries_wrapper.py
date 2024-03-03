@@ -181,9 +181,9 @@ class Iris:
         """
         
         sort_type_map = {
-            "rating": "c.rating",
+            "rating": "g.rating",
             "random": "random()",
-            "recent": "c.creation_date",
+            "recent": "g.first_release_date",
         }
 
         return await self.iris_dal.get_games_sorted(
