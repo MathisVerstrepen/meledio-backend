@@ -23,6 +23,7 @@ mkdir -p "$BACCHUS_DIR"/dev
 mkdir -p "$BACCHUS_DIR"/dev/audio
 mkdir -p "$BACCHUS_DIR"/dev/audio/tmp
 mkdir -p "$BACCHUS_DIR"/dev/media 
+mkdir -p "$BACCHUS_DIR"/dev/media/cache
 mkdir -p "$BACCHUS_DIR"/dev/chapters
 mkdir -p "$BACCHUS_DIR"/dev/reports
 mkdir -p "$BACCHUS_DIR"/dev/reports/wizard

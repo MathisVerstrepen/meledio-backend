@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 from contextlib import asynccontextmanager
+from PIL import Image
 
 from fastapi import FastAPI, Path, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
@@ -69,6 +70,9 @@ validation_qual = {"big": "b", "med": "m", "huge": "h", "small": "s"}
 # Mount static files from bacchus
 triton.mount("/static", StaticFiles(directory="/bacchus/audio/"), name="static")
 
+# Empty media cache folder
+for f in glob.glob("/bacchus/media/cache/*"):
+    os.remove(f)
 
 @triton.get("/health")
 async def health_check():
@@ -96,11 +100,15 @@ async def read_video(
     return FileResponse(file_path)
 
 
-@triton.get("/media/{cat}/{qual}/{filehash}")
+@triton.get("/media/{game_id}/{cat}/{qual}/{filehash}")
 async def read_media(
+    game_id: int,
     cat: str = Path(default=..., title="media category"),
     qual: str = Path(default=..., title="media quality"),
     filehash: str = Path(default=..., title="media hash/id"),
+    width: int = 0,
+    height: int = 0,
+    format: str = "jpg",
 ) -> FileResponse:
     """ Get a media file by its hash and category
 
@@ -123,10 +131,51 @@ async def read_media(
     if format_cat:
         format_qual = validation_qual.get(qual)
         if format_qual:
-            file_path = f"/bacchus/media/{format_cat}_{format_qual}_{filehash}.jpg"
+            file_path = f"/bacchus/media/{game_id}/{format_cat}_{format_qual}_{filehash}.jpg"
             if exists(file_path):
-                return FileResponse(file_path, headers=headers)
-
+                # Check if resized cached file exists
+                cached_file_path = f"/bacchus/media/cache/{format_cat}_{format_qual}_{filehash}_{width}_{height}.{format}"
+                if width and height:
+                    if exists(cached_file_path):
+                        return FileResponse(cached_file_path, headers=headers)
+                
+                # Resize image if needed and cache it
+                # resize needs to keep the aspect ratio of the original image
+                # if only one dimension is provided, the other one is calculated to keep the aspect ratio
+                # if both dimensions are provided, the image is resized to fit in the provided dimensions
+                
+                if width and height:
+                    # Keep aspect ratio by resizing to fit in the provided dimensions
+                    img = Image.open(file_path)
+                    aspect_ratio = img.size[0] / img.size[1]
+                    if width / aspect_ratio < height:
+                        img = img.resize((width, int(width / aspect_ratio)), Image.Resampling.LANCZOS)
+                    else:
+                        img = img.resize((int(height * aspect_ratio), height), Image.Resampling.LANCZOS)
+                    img.save(cached_file_path, optimize=True)
+                    
+                elif width:
+                    # Only width is provided
+                    img = Image.open(file_path)
+                    wpercent = (width / float(img.size[0]))
+                    hsize = int((float(img.size[1]) * float(wpercent)))
+                    img = img.resize((width, hsize), Image.Resampling.LANCZOS)
+                    img.save(cached_file_path, optimize=True)
+                    
+                elif height:
+                    # Only height is provided
+                    img = Image.open(file_path)
+                    hpercent = (height / float(img.size[1]))
+                    wsize = int((float(img.size[0]) * float(hpercent)))
+                    img = img.resize((wsize, height), Image.Resampling.LANCZOS)
+                    img.save(cached_file_path, optimize=True)
+                
+                else:
+                    # No dimensions provided
+                    cached_file_path = file_path
+                    
+                return FileResponse(cached_file_path, headers=headers)
+                
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Media resource not found",

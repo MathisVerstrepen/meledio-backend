@@ -9,6 +9,7 @@ pydantic
 # Traitement de Fichiers et IO Asynchrone
 aiofiles
 pydub
+pillow
 
 # Base de Données et Caching
 psycopg[binary]
