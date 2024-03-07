@@ -264,6 +264,7 @@ class Iris:
         self,
         sort_type: Literal["rating", "random", "recent"],
         sort_order: Literal["asc", "desc"],
+        min_games: int,
         offset: int = 0,
         limit: int = 20,
     ):
@@ -282,14 +283,14 @@ class Iris:
         }
 
         collections = await self.iris_dal.get_collections_sorted(
-            sort_type_map[sort_type], sort_order, offset, limit
+            sort_type_map[sort_type], sort_order, min_games, offset, limit
         )
-        
+
         for collection in collections:
             collection["games"] = await self.iris_dal.get_collection_reduce_game_info(
                 collection["id"]
             )
-            
+
         return collections
 
     async def get_album_by_id(self, album_id: str):

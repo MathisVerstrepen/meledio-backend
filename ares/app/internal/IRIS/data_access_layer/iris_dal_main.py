@@ -665,8 +665,9 @@ class IrisDataAccessLayer:
 
     async def get_collections_sorted(
         self,
-        sort_type: Literal["c.name", "c.n_games", "c.n_tracks"],
+        sort_type: Literal["avg_rating", "random()", "latest_game_release_date"],
         sort_order: Literal["asc", "desc"],
+        min_games: int,
         offset: int,
         limit: int,
     ) -> list:
@@ -713,7 +714,8 @@ class IrisDataAccessLayer:
                         iris.album_track at2 
                         ON at2.album_id = a.id 
                     GROUP BY c.id
-                    ORDER BY random() desc
+                    HAVING count(DISTINCT(g.id)) >= %s
+                    ORDER BY {sort_type} {sort_order}
                     OFFSET %s
                     LIMIT %s;
                     """
@@ -722,7 +724,7 @@ class IrisDataAccessLayer:
                     sort_type=sql.SQL(sort_type),
                     sort_order=sql.SQL(sort_order),
                 )
-                data = (offset, limit)
+                data = (min_games, offset, limit)
 
                 await curs.execute(query, data)
                 return await curs.fetchall()

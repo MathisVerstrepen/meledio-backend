@@ -181,6 +181,7 @@ async def get_collections_sorted(
     request: Request,
     sort_type: Annotated[str, Query(..., regex="^(rating|random|recent)$")],
     sort_order: Annotated[str, Query(..., regex="^(asc|desc)$")] = "desc",
+    min_games: Annotated[int, Query(..., ge=1)] = 1,
     offset: Annotated[int, Query(..., ge=0)] = 0,
     limit: Annotated[int, Query(..., ge=1, le=50)] = 10,
 ):  # pylint: disable=unused-argument
@@ -197,7 +198,7 @@ async def get_collections_sorted(
         JSONResponse: JSON response with collections data
     """
     collections_data = await connectors.iris_query_wrapper.get_collections_sorted(
-        sort_type, sort_order, offset, limit
+        sort_type, sort_order, min_games, offset, limit
     )
 
     return collections_data
