@@ -12,6 +12,7 @@ RUN apt-get -y update && apt-get -y install ffmpeg && apt-get clean
 
 COPY ./docker/conf/ares-requirements.txt /ares/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /ares/requirements.txt
+RUN python3 -m pip install -U --pre yt-dlp
 
 COPY ./ares /ares
 

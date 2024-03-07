@@ -72,9 +72,6 @@ class YoutubeDownloadError(YoutubeException):
         
         self.message = message
 
-        logger.error(self.message)
-        logger.error(traceback.format_exc())
-
         super().__init__(self.message)
 
 
@@ -82,7 +79,7 @@ class YoutubeAlignChaptersError(YoutubeException):
     """Base class for align chapters errors."""
 
     def __init__(
-        self, message: str, error_id: str = "0001", error_http_code: int = 500
+        self, message: str, error_id: str = "0001", error_http_code: int = 500 
     ):
         self.error_id = error_id
         self.error_http_code = error_http_code

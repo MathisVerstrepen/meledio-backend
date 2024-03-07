@@ -81,9 +81,9 @@ class YoutubeAudioDownloader:
         Args:
             video_id (str, optional): _description_. Defaults to None.
         """
-        
+
         logger.info("[Downloader] Using backup downloader for video %s", video_id)
-        
+
         proxy = PROXIES[random.randint(0, len(PROXIES) - 1)]
 
         cmd = [
@@ -91,7 +91,6 @@ class YoutubeAudioDownloader:
             "--proxy",
             proxy,
             "--force-ipv4",
-            "--no-check-certificate",
             "-f",
             "bestaudio[ext=m4a]",
             "--output",
@@ -106,7 +105,7 @@ class YoutubeAudioDownloader:
         _, stderr = await process.communicate()
 
         if stderr:
-            logger.error(
+            logger.warning(
                 "Error while downloading audio for video %s: %s", video_id, stderr
             )
             raise YoutubeDownloadError("Error while downloading audio", "0001", 500)
@@ -141,15 +140,15 @@ class YoutubeAudioDownloader:
         Args:
             video_id (str, optional): Video ID. Defaults to None.
         """
-        
+
         if video_id is None:
             video_id = self.videoID
             filepath = self.filepath
         else:
             filepath = f"{self.dir_path}/{video_id}.opus"
-            
+
         logger.info("[Downloader] Downloading audio for video %s", video_id)
-            
+
         proxy = PROXIES[random.randint(0, len(PROXIES) - 1)]
 
         cmd = [
@@ -157,7 +156,6 @@ class YoutubeAudioDownloader:
             "--proxy",
             proxy,
             "--force-ipv4",
-            "--no-check-certificate",
             "-f",
             "bestaudio[ext=webm]",
             "-x",
@@ -175,7 +173,7 @@ class YoutubeAudioDownloader:
         )
 
         _, stderr = await process.communicate()
-        
+
         if stderr and not "WARNING: [youtube] Failed to download m3u8 information" in stderr.decode("utf-8"):
             if "Requested format is not available" in stderr.decode("utf-8"):
                 logger.warning(
@@ -188,7 +186,7 @@ class YoutubeAudioDownloader:
                     backup_filepath, filepath, video_id
                 )
             else:
-                logger.error(
+                logger.warning(
                     "Error while downloading audio for video %s: %s", video_id, stderr
                 )
                 raise YoutubeDownloadError("Error while downloading audio", "0001", 500)
@@ -311,25 +309,28 @@ class YoutubeAudioDownloader:
             raise YoutubeDownloadError("Error while deleting audio files", "0003", 500)
 
     async def download_playlist(self) -> None:
-        """Download all the audio of a playlist and save it in /bacchus/audio/tmp as an .opus file."""
+        """Download all the audio of a playlist
+        and save it in /bacchus/audio/tmp as an .opus file."""
 
         semaphore = asyncio.Semaphore(8)
         tasks = []
-            
+
         async def downloader_with_semaphore(semaphore, video_id):
             async with semaphore:
-                for _ in range(3):
+                for i in range(5):
                     try:
                         await self.download_audio_sync(video_id)
                         break
                     except YoutubeDownloadError:
                         logger.warning("Retrying download for video %s", video_id)
                         continue
-                
+                if i == 2:
+                    raise YoutubeDownloadError("Error while downloading audio", "0001", 500)
+
         for video_id in self.video_ids:
             task = downloader_with_semaphore(semaphore, video_id)
             tasks.append(task)
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for result in results:

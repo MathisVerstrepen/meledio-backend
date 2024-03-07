@@ -39,7 +39,7 @@ matplotlib
 blurhash-python
 selenium
 webdriver-manager
-yt_dlp
+# yt_dlp
 
 # Autres
 slowapi

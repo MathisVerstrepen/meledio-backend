@@ -153,7 +153,6 @@ class Wizard:
         except Exception as e:
             self.status = "Failed"
             self.error = "[Download videos] " + str(e)
-            logger.error(traceback.format_exc())
             raise
 
         logger.info("[Wizard] Aligning videos for [%s]", self.game_name or self.game_id)

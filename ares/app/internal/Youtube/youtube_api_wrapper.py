@@ -89,13 +89,17 @@ class Youtube:
 
         audio_downloader = YoutubeAudioDownloader()
         await audio_downloader.initialize(videoID, "video")
-        for _ in range(3):
+        for i in range(5):
             try:
                 await audio_downloader.download_audio_sync()
                 break
             except YoutubeDownloadError:
-                logger.error( "Retrying download for video %s",  videoID)
+                logger.warning( "Retrying download for video %s",  videoID)
                 continue
+
+        if i == 4:
+            logger.error("Failed to download video %s", videoID)
+            raise YoutubeDownloadError("Failed to download video")
 
         complete_task()
 
