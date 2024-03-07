@@ -77,7 +77,7 @@ services:
       - BACCHUS_FOLDER=${BACCHUS_FOLDER}
       - REDIS_HOST=atlas_redis_dev
       - TRITON_TOKEN=${TRITON_TOKEN}
-      - TRITON_HOST=triton_api_dev
+      - TRITON_HOST=http://triton_api_dev:5110
     depends_on:
       iris_db:
         condition: service_healthy
